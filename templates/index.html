@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ translations.title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .upload-area { border: 3px dashed #667eea; border-radius: 15px; padding: 40px; text-align: center; background: #f8f9ff; cursor: pointer; transition: all 0.3s ease; }
+        .upload-area:hover { background: #e8ebff; }
+        .upload-area.dragover { background: #d4d8ff; }
+        .lang-selector { position: absolute; top: 15px; right: 15px; z-index: 1000; }
+        .accordion-button:not(.collapsed) { background-color: #667eea; color: white; }
+        .accordion-button:not(.collapsed)::after { filter: brightness(0) invert(1); }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid position-relative">
+            <span class="navbar-brand mb-0 h1"><i class="fas fa-book-reader"></i> {{ translations.title }}</span>
+            <div class="lang-selector">
+                <a href="{{ url_for('set_language', lang='fr') }}" class="btn btn-sm btn-outline-light {% if lang == 'fr' %}active{% endif %}">FR</a>
+                <a href="{{ url_for('set_language', lang='en') }}" class="btn btn-sm btn-outline-light {% if lang == 'en' %}active{% endif %}">EN</a>
+                <a href="{{ url_for('set_language', lang='ja') }}" class="btn btn-sm btn-outline-light {% if lang == 'ja' %}active{% endif %}">JP</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-10 mx-auto">
+                <div class="card shadow-lg">
+                    <div class="card-header bg-primary text-white">
+                        <h4><i class="fas fa-cloud-upload-alt"></i> {{ translations.subtitle }}</h4>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="fileInput" class="form-label"><strong>{{ translations.select_file }}</strong> (PDF, PNG, JPG, TIFF)</label>
+                                <div class="upload-area" id="uploadArea">
+                                    <input type="file" class="form-control d-none" id="fileInput" name="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp" required>
+                                    <div class="text-center">
+                                        <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                                        <p class="mb-2">{{ translations.drag_drop }}</p>
+                                        <small class="text-muted">Max: 100MB</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="format" class="form-label">{{ translations.formats.md }}</label>
+                                        <select class="form-select" id="format" name="format">
+                                            {% for key, value in translations.formats.items() %}
+                                            <option value="{{ key }}" {% if key == 'md' %}selected{% endif %}>{{ value }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="device" class="form-label">{{ translations.device }}</label>
+                                        <select class="form-select" id="device" name="device">
+                                            <option value="cpu" selected>CPU</option>
+                                            <option value="cuda">CUDA (GPU)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- OPTIONS AVANCÉES -->
+                            <div class="accordion mb-3" id="optionsAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedOptions">
+                                            <i class="fas fa-cogs"></i> {{ translations.options }}
+                                        </button>
+                                    </h2>
+                                    <div id="advancedOptions" class="accordion-collapse collapse" data-bs-parent="#optionsAccordion">
+                                        <div class="accordion-body">
+                                            <div class="row">
+                                                <!-- COLONNE GAUCHE -->
+                                                <div class="col-md-6">
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="vis" name="vis">
+                                                        <label class="form-check-label" for="vis">
+                                                            <i class="fas fa-image"></i> {{ translations.vis }}
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="lite" name="lite">
+                                                        <label class="form-check-label" for="lite">
+                                                            <i class="fas fa-feather"></i> {{ translations.lite }}
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="figure" name="figure">
+                                                        <label class="form-check-label" for="figure">
+                                                            <i class="fas fa-chart-pie"></i> {{ translations.figure }}
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="figure_letter" name="figure_letter">
+                                                        <label class="form-check-label" for="figure_letter">
+                                                            <i class="fas fa-font"></i> {{ translations.figure_letter }}
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                <!-- COLONNE DROITE -->
+                                                <div class="col-md-6">
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="ignore_line_break" name="ignore_line_break">
+                                                        <label class="form-check-label" for="ignore_line_break">
+                                                            <i class="fas fa-paragraph"></i> {{ translations.ignore_line_break }}
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="combine" name="combine">
+                                                        <label class="form-check-label" for="combine">
+                                                            <i class="fas fa-compress"></i> {{ translations.combine }}
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-3">
+                                                        <input class="form-check-input" type="checkbox" id="ignore_meta" name="ignore_meta">
+                                                        <label class="form-check-label" for="ignore_meta">
+                                                            <i class="fas fa-minus-circle"></i> {{ translations.ignore_meta }}
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- OPTIONS DE TRADUCTION -->
+                            <div class="accordion mb-3" id="transAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#transOptions">
+                                            <i class="fas fa-language"></i> {{ translations.trans_options }}
+                                        </button>
+                                    </h2>
+                                    <div id="transOptions" class="accordion-collapse collapse" data-bs-parent="#transAccordion">
+                                        <div class="accordion-body">
+                                            <div class="form-check form-switch mb-3">
+                                                <input class="form-check-input" type="checkbox" id="translate" name="translate">
+                                                <label class="form-check-label" for="translate">
+                                                    <i class="fas fa-language"></i> {{ translations.translate }}
+                                                </label>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="ollama_model" class="form-label">{{ translations.ollama_model }}</label>
+                                                <select class="form-select" id="ollama_model" name="ollama_model">
+                                                    <option value="qwen3:8b">qwen3:8b (léger, rapide)</option>
+                                                    <option value="qwen3:14b">qwen3:14b (précis)</option>
+                                                    <option value="llama3.3:70b-instruct-q4_K_M">llama3.3:70b (très précis, lent)</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="target_lang" class="form-label">{{ translations.target_lang }}</label>
+                                                <select class="form-select" id="target_lang" name="target_lang">
+                                                    {% for code, name in translations.target_langs.items() %}
+                                                    <option value="{{ code }}" {% if code == 'fr' %}selected{% endif %}>{{ name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg" id="analyzeBtn">
+                                    <i class="fas fa-magic"></i> {{ translations.launch }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="mt-4" id="resultsSection" style="display: none;">
+                    <div class="card shadow-lg">
+                        <div class="card-header bg-success text-white">
+                            <h5><i class="fas fa-check-circle"></i> {{ translations.success }}</h5>
+                        </div>
+                        <div class="card-body" id="resultsBody"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const uploadForm = document.getElementById('uploadForm');
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsBody = document.getElementById('resultsBody');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault(); uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault(); uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) fileInput.files = files;
+            });
+
+            uploadForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(uploadForm);
+                if (!fileInput.files[0]) { alert('{{ translations.select_file }}'); return; }
+
+                analyzeBtn.disabled = true;
+                analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> {{ translations.launch }}...';
+
+                try {
+                    const response = await fetch('/upload', { method: 'POST', body: formData });
+                    const result = await response.json();
+                    if (response.ok) showResults(result); else alert(`{{ translations.error }}: ${result.error}`);
+                } catch (error) {
+                    alert('{{ translations.error }}');
+                } finally {
+                    analyzeBtn.disabled = false; analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
+                }
+            });
+
+            function showResults(result) {
+                resultsSection.style.display = 'block';
+                let html = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> {{ translations.success }} <a href="/results/${result.job_id}" class="btn btn-sm btn-success float-end">{{ translations.view_results }}</a></div><p><strong>{{ translations.job_id }}:</strong> ${result.job_id}</p>`;
+                if (result.files && result.files.length > 0) {
+                    html += '<h6>{{ translations.files_generated }}:</h6><ul class="list-unstyled">';
+                    result.files.forEach(file => html += `<li><i class="fas fa-file"></i> ${file.name} <a href="${file.url}" class="btn btn-sm btn-link">{{ translations.download }}</a></li>`);
+                    html += '</ul>';
+                }
+                resultsBody.innerHTML = html;
+                resultsSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    </script>
+</body>
+</html>

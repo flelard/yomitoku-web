@@ -1,0 +1,23 @@
+# Ignorer l'environnement virtuel Python
+/venv/
+
+# Ignorer les fichiers cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorer le contenu des dossiers de sortie et d'upload
+# Le .gitkeep permet de conserver les dossiers vides dans le repo
+output/*
+!output/.gitkeep
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Fichiers de configuration IDE
+.vscode/
+.idea/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
