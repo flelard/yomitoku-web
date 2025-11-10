@@ -28,12 +28,23 @@
                             <div class="list-group-item d-flex justify-content-between align-items-center">
                                 <div>
                                     <i class="fas fa-file-alt"></i> 
-                                    <strong>{{ file.name }}</strong>
+                                    <a href="{{ url_for('view_file', job_id=job_id, filename=file.name) }}" target="_blank">
+                                        <strong>{{ file.name }}</strong>
+                                    </a>
                                     <small class="text-muted">({{ file.size }})</small>
                                 </div>
-                                <a href="{{ url_for('download_file', job_id=job_id, filename=file.name) }}" class="btn btn-sm btn-primary">
-                                    <i class="fas fa-download"></i> {{ translations.download }}
-                                </a>
+                                <div>
+                                    <!-- Bouton Voir -->
+                                    <a href="{{ url_for('view_file', job_id=job_id, filename=file.name) }}" 
+                                       class="btn btn-sm btn-outline-info me-2" target="_blank">
+                                        <i class="fas fa-eye"></i> Voir
+                                    </a>
+                                    <!-- Bouton Télécharger -->
+                                    <a href="{{ url_for('download_file', job_id=job_id, filename=file.name) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-download"></i> {{ translations.download }}
+                                    </a>
+                                </div>
                             </div>
                             {% endfor %}
                         </div>
@@ -54,11 +65,22 @@
                             <div class="list-group-item d-flex justify-content-between align-items-center">
                                 <div>
                                     <i class="fas fa-file-alt text-success"></i> 
-                                    <strong>{{ file }}</strong>
+                                    <a href="{{ url_for('view_file', job_id=job_id, filename=file) }}" target="_blank">
+                                        <strong>{{ file }}</strong>
+                                    </a>
                                 </div>
-                                <a href="{{ url_for('download_file', job_id=job_id, filename=file) }}" class="btn btn-sm btn-primary">
-                                    <i class="fas fa-download"></i> {{ translations.download }}
-                                </a>
+                                <div>
+                                    <!-- Bouton Voir -->
+                                    <a href="{{ url_for('view_file', job_id=job_id, filename=file) }}" 
+                                       class="btn btn-sm btn-outline-info me-2" target="_blank">
+                                        <i class="fas fa-eye"></i> Voir
+                                    </a>
+                                    <!-- Bouton Télécharger -->
+                                    <a href="{{ url_for('download_file', job_id=job_id, filename=file) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-download"></i> {{ translations.download }}
+                                    </a>
+                                </div>
                             </div>
                             {% endfor %}
                         </div>
@@ -76,14 +98,27 @@
                             {% for vis in visualizations %}
                             <div class="col-md-6 mb-3">
                                 <div class="card">
-                                    <img src="{{ url_for('download_file', job_id=job_id, filename=vis) }}" class="card-img-top" alt="Visualization">
+                                    <a href="{{ url_for('view_file', job_id=job_id, filename=vis) }}" target="_blank">
+                                        <img src="{{ url_for('download_file', job_id=job_id, filename=vis) }}" class="card-img-top" alt="Visualization">
+                                    </a>
                                     <div class="card-body">
                                         <p class="card-text text-center">
-                                            <small>{{ vis }}</small>
+                                            <a href="{{ url_for('view_file', job_id=job_id, filename=vis) }}" target="_blank">
+                                                <small>{{ vis }}</small>
+                                            </a>
                                         </p>
-                                        <a href="{{ url_for('download_file', job_id=job_id, filename=vis) }}" class="btn btn-sm btn-outline-primary w-100">
-                                            <i class="fas fa-download"></i> {{ translations.download }}
-                                        </a>
+                                        <div class="d-flex justify-content-between">
+                                            <!-- Bouton Voir -->
+                                            <a href="{{ url_for('view_file', job_id=job_id, filename=vis) }}" 
+                                               class="btn btn-sm btn-outline-info flex-grow-1 me-1" target="_blank">
+                                                <i class="fas fa-eye"></i> Voir
+                                            </a>
+                                            <!-- Bouton Télécharger -->
+                                            <a href="{{ url_for('download_file', job_id=job_id, filename=vis) }}" 
+                                               class="btn btn-sm btn-outline-primary flex-grow-1">
+                                                <i class="fas fa-download"></i> {{ translations.download }}
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

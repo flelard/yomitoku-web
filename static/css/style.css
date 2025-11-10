@@ -73,3 +73,67 @@ body {
 footer {
     margin-top: auto;
 }
+
+/* ===== NOUVEAUX STYLES ===== */
+
+/* Boutons de prompt actifs */
+.btn-group .btn.active {
+    background-color: #667eea !important;
+    color: white !important;
+}
+
+/* Cartes de job dans la page de navigation */
+.job-card {
+    transition: transform 0.2s ease;
+}
+
+.job-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+
+/* Prévisualisation de fichier */
+.preview-modal .modal-content {
+    max-height: 80vh;
+}
+
+.preview-modal .modal-body {
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: 'Courier New', monospace;
+}
+
+/* Statut pendant traitement */
+#processingStatus {
+    display: none;
+    text-align: center;
+    padding: 20px;
+    background: #fff3cd;
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+/* Zone de logs */
+#logsContainer {
+    display: none;
+    margin-top: 20px;
+    padding: 15px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+}
+
+.log-entry {
+    margin-bottom: 5px;
+    padding: 3px 0;
+    border-bottom: 1px solid #333;
+}
+
+.log-info { color: #4fc3f7; }
+.log-success { color: #4caf50; }
+.log-warning { color: #ff9800; }
+.log-error { color: #f44336; }

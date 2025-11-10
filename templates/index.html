@@ -14,6 +14,52 @@
         .lang-selector { position: absolute; top: 15px; right: 15px; z-index: 1000; }
         .accordion-button:not(.collapsed) { background-color: #667eea; color: white; }
         .accordion-button:not(.collapsed)::after { filter: brightness(0) invert(1); }
+        .badge-model { font-size: 0.8rem; margin-left: 5px; }
+        
+        /* Zone de prévisualisation */
+        #filePreview { display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 10px; border: 1px solid #dee2e6; }
+        #filePreview img { max-width: 200px; max-height: 200px; border-radius: 8px; margin-right: 15px; }
+        .file-details { display: inline-block; vertical-align: top; }
+        
+        /* Zone de progression */
+        #progressContainer { display: none; margin-top: 20px; }
+        .progress { height: 30px; border-radius: 15px; }
+        .progress-bar { font-weight: bold; transition: width 0.3s ease; }
+        
+        /* Zone de logs */
+        #logsContainer { display: none; margin-top: 20px; padding: 15px; background: #1e1e1e; color: #d4d4d4; border-radius: 10px; max-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85em; }
+        .log-entry { margin-bottom: 5px; padding: 3px 0; border-bottom: 1px solid #333; }
+        .log-info { color: #4fc3f7; }
+        .log-success { color: #4caf50; }
+        .log-warning { color: #ff9800; }
+        .log-error { color: #f44336; }
+        
+        /* Bouton caché pendant traitement */
+        #analyzeBtnContainer {
+            transition: opacity 0.3s ease;
+        }
+        .btn-hidden {
+            display: none !important;
+        }
+        
+        /* Statut pendant traitement */
+        #processingStatus {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            background: #fff3cd;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        /* Tooltips */
+        .tooltip-inner { max-width: 300px; text-align: left; }
+        
+        /* Boutons de prompt actifs */
+        .btn-group .btn.active {
+            background-color: #667eea !important;
+            color: white !important;
+        }
     </style>
 </head>
 <body>
@@ -24,6 +70,9 @@
                 <a href="{{ url_for('set_language', lang='fr') }}" class="btn btn-sm btn-outline-light {% if lang == 'fr' %}active{% endif %}">FR</a>
                 <a href="{{ url_for('set_language', lang='en') }}" class="btn btn-sm btn-outline-light {% if lang == 'en' %}active{% endif %}">EN</a>
                 <a href="{{ url_for('set_language', lang='ja') }}" class="btn btn-sm btn-outline-light {% if lang == 'ja' %}active{% endif %}">JP</a>
+                <a href="/jobs" class="btn btn-sm btn-outline-light ms-2">
+                    <i class="fas fa-history"></i> {{ translations.recent_jobs }}
+                </a>
             </div>
         </div>
     </nav>
@@ -47,12 +96,13 @@
                                         <small class="text-muted">Max: 100MB</small>
                                     </div>
                                 </div>
+                                <div id="filePreview"></div>
                             </div>
 
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label for="format" class="form-label">{{ translations.formats.md }}</label>
+                                        <label for="format" class="form-label">{{ translations.format_label }}</label>
                                         <select class="form-select" id="format" name="format">
                                             {% for key, value in translations.formats.items() %}
                                             <option value="{{ key }}" {% if key == 'md' %}selected{% endif %}>{{ value }}</option>
@@ -82,49 +132,54 @@
                                     <div id="advancedOptions" class="accordion-collapse collapse" data-bs-parent="#optionsAccordion">
                                         <div class="accordion-body">
                                             <div class="row">
-                                                <!-- COLONNE GAUCHE -->
                                                 <div class="col-md-6">
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="vis" name="vis">
+                                                        <input class="form-check-input" type="checkbox" id="vis" name="vis" 
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_vis }}">
                                                         <label class="form-check-label" for="vis">
                                                             <i class="fas fa-image"></i> {{ translations.vis }}
                                                         </label>
                                                     </div>
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="lite" name="lite">
+                                                        <input class="form-check-input" type="checkbox" id="lite" name="lite"
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_lite }}">
                                                         <label class="form-check-label" for="lite">
                                                             <i class="fas fa-feather"></i> {{ translations.lite }}
                                                         </label>
                                                     </div>
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="figure" name="figure">
+                                                        <input class="form-check-input" type="checkbox" id="figure" name="figure"
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_figure }}">
                                                         <label class="form-check-label" for="figure">
                                                             <i class="fas fa-chart-pie"></i> {{ translations.figure }}
                                                         </label>
                                                     </div>
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="figure_letter" name="figure_letter">
+                                                        <input class="form-check-input" type="checkbox" id="figure_letter" name="figure_letter"
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_figure_letter }}">
                                                         <label class="form-check-label" for="figure_letter">
                                                             <i class="fas fa-font"></i> {{ translations.figure_letter }}
                                                         </label>
                                                     </div>
                                                 </div>
-                                                <!-- COLONNE DROITE -->
                                                 <div class="col-md-6">
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="ignore_line_break" name="ignore_line_break">
+                                                        <input class="form-check-input" type="checkbox" id="ignore_line_break" name="ignore_line_break"
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_ignore_line_break }}">
                                                         <label class="form-check-label" for="ignore_line_break">
                                                             <i class="fas fa-paragraph"></i> {{ translations.ignore_line_break }}
                                                         </label>
                                                     </div>
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="combine" name="combine">
+                                                        <input class="form-check-input" type="checkbox" id="combine" name="combine"
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_combine }}">
                                                         <label class="form-check-label" for="combine">
                                                             <i class="fas fa-compress"></i> {{ translations.combine }}
                                                         </label>
                                                     </div>
                                                     <div class="form-check form-switch mb-3">
-                                                        <input class="form-check-input" type="checkbox" id="ignore_meta" name="ignore_meta">
+                                                        <input class="form-check-input" type="checkbox" id="ignore_meta" name="ignore_meta"
+                                                               data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_ignore_meta }}">
                                                         <label class="form-check-label" for="ignore_meta">
                                                             <i class="fas fa-minus-circle"></i> {{ translations.ignore_meta }}
                                                         </label>
@@ -147,19 +202,39 @@
                                     <div id="transOptions" class="accordion-collapse collapse" data-bs-parent="#transAccordion">
                                         <div class="accordion-body">
                                             <div class="form-check form-switch mb-3">
-                                                <input class="form-check-input" type="checkbox" id="translate" name="translate">
+                                                <input class="form-check-input" type="checkbox" id="translate" name="translate"
+                                                       data-bs-toggle="tooltip" data-bs-title="{{ translations.tooltip_translate }}">
                                                 <label class="form-check-label" for="translate">
                                                     <i class="fas fa-language"></i> {{ translations.translate }}
                                                 </label>
                                             </div>
+                                            
                                             <div class="mb-3">
-                                                <label for="ollama_model" class="form-label">{{ translations.ollama_model }}</label>
+                                                <label for="ollama_model" class="form-label">
+                                                    {{ translations.ollama_model }}
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" id="refreshModels">
+                                                        <i class="fas fa-sync-alt"></i> {{ translations.refresh_models }}
+                                                    </button>
+                                                </label>
                                                 <select class="form-select" id="ollama_model" name="ollama_model">
-                                                    <option value="qwen3:8b">qwen3:8b (léger, rapide)</option>
-                                                    <option value="qwen3:14b">qwen3:14b (précis)</option>
-                                                    <option value="llama3.3:70b-instruct-q4_K_M">llama3.3:70b (très précis, lent)</option>
+                                                    {% if ollama_models %}
+                                                        {% for model in ollama_models %}
+                                                        <option value="{{ model }}">{{ model }}</option>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <option value="">{{ translations.no_models }}</option>
+                                                    {% endif %}
                                                 </select>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-info-circle"></i> 
+                                                    {% if ollama_models %}
+                                                        {{ ollama_models|length }} modèle(s) détecté(s)
+                                                    {% else %}
+                                                        Aucun modèle détecté - Démarrez Ollama
+                                                    {% endif %}
+                                                </small>
                                             </div>
+                                            
                                             <div class="mb-3">
                                                 <label for="target_lang" class="form-label">{{ translations.target_lang }}</label>
                                                 <select class="form-select" id="target_lang" name="target_lang">
@@ -168,20 +243,83 @@
                                                     {% endfor %}
                                                 </select>
                                             </div>
+
+                                            <div class="mb-3">
+                                                <label for="custom_prompt" class="form-label">
+                                                    {{ translations.custom_prompt }}
+                                                    <i class="fas fa-question-circle" data-bs-toggle="tooltip" title="{{ translations.custom_prompt_help }}"></i>
+                                                </label>
+                                                <div class="btn-group mb-2 w-100" role="group">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" id="resetPrompt">
+                                                        <i class="fas fa-undo"></i> Défaut
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-success" id="promptManga">
+                                                        <i class="fas fa-book"></i> Manga
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-info" id="promptGame">
+                                                        <i class="fas fa-gamepad"></i> Jeux vidéo
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-warning" id="promptTech">
+                                                        <i class="fas fa-laptop-code"></i> Technique
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" id="promptAdmin">
+                                                        <i class="fas fa-file-contract"></i> Administratif
+                                                    </button>
+                                                </div>
+                                                <textarea class="form-control font-monospace" id="custom_prompt" name="custom_prompt" rows="6">You are a professional translator. Translate this Japanese text to {target_lang}.
+Return ONLY the translation, nothing else:
+
+{text}</textarea>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-lightbulb"></i> Variables : <code>{text}</code>, <code>{target_lang}</code>
+                                                    <br><i class="fas fa-info-circle"></i> Modifiez le prompt ci-dessous selon vos besoins
+                                                </small>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="d-grid gap-2">
+                            <!-- BARRE DE PROGRESSION EN TEMPS RÉEL -->
+                            <div id="progressContainer">
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span id="progressText"><strong>{{ translations.progress_processing }}</strong></span>
+                                        <span id="progressPercent">0%</span>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             id="progressBar" role="progressbar" style="width: 0%">
+                                        </div>
+                                    </div>
+                                    <small id="progressDetails" class="text-muted"></small>
+                                </div>
+                            </div>
+
+                            <!-- ZONE DES LOGS EN TEMPS RÉEL -->
+                            <div id="logsContainer">
+                                <h6><i class="fas fa-terminal"></i> Logs en temps réel :</h6>
+                                <div id="logsContent"></div>
+                            </div>
+
+                            <!-- Bouton dans un conteneur pour le cacher -->
+                            <div class="d-grid gap-2 mt-3" id="analyzeBtnContainer">
                                 <button type="submit" class="btn btn-primary btn-lg" id="analyzeBtn">
                                     <i class="fas fa-magic"></i> {{ translations.launch }}
                                 </button>
+                            </div>
+                            
+                            <!-- Statut de traitement (caché par défaut) -->
+                            <div id="processingStatus">
+                                <i class="fas fa-cog fa-spin fa-2x text-warning mb-3"></i>
+                                <h5><strong>{{ translations.progress_processing }}</strong></h5>
+                                <p class="text-muted">Veuillez patienter</p>
                             </div>
                         </form>
                     </div>
                 </div>
 
+                <!-- RÉSULTATS (cachés par défaut, affichés seulement à la fin) -->
                 <div class="mt-4" id="resultsSection" style="display: none;">
                     <div class="card shadow-lg">
                         <div class="card-header bg-success text-white">
@@ -196,18 +334,101 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // ===== PROMPTS PRÉDÉFINIS =====
+        const PROMPTS = {
+            default: `You are a professional translator. Translate this Japanese text to {target_lang}.
+Return ONLY the translation, nothing else:
+
+{text}`,
+
+            manga: `You are a professional manga translator. Translate this Japanese text to {target_lang}.
+Maintain the tone, style, and cultural nuances appropriate for manga.
+Do not translate sound effects (SFX) literally - adapt them naturally.
+Return ONLY the translation:
+
+{text}`,
+
+            game: `You are a professional video game translator. Translate this Japanese text to {target_lang}.
+Use gaming terminology and maintain an immersive, engaging style appropriate for games.
+Preserve character names and special terms.
+Return ONLY the translation:
+
+{text}`,
+
+            tech: `You are a technical translator specializing in IT and software. Translate this Japanese technical documentation to {target_lang}.
+Use precise technical terminology and maintain accuracy.
+Preserve code snippets, commands, and technical terms.
+Return ONLY the translation:
+
+{text}`,
+
+            admin: `You are a translator specialized in Japanese administrative documents. Translate this official document to {target_lang}.
+Use formal, precise language appropriate for administrative/legal contexts.
+Preserve dates, numbers, and official titles exactly as written.
+Maintain the structural format of the document.
+Return ONLY the translation:
+
+{text}`
+        };
+
+        // Fonction pour changer de prompt
+        function setPrompt(type) {
+            const textarea = document.getElementById('custom_prompt');
+            textarea.value = PROMPTS[type] || PROMPTS.default;
+            
+            // Mettre à jour l'état des boutons
+            document.querySelectorAll('[id^="prompt"]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Activer le bouton correspondant
+            const activeBtn = document.getElementById(`prompt${type.charAt(0).toUpperCase() + type.slice(1)}`);
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const uploadArea = document.getElementById('uploadArea');
             const fileInput = document.getElementById('fileInput');
             const uploadForm = document.getElementById('uploadForm');
+            const filePreview = document.getElementById('filePreview');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressText = document.getElementById('progressText');
+            const progressDetails = document.getElementById('progressDetails');
+            const logsContainer = document.getElementById('logsContainer');
+            const logsContent = document.getElementById('logsContent');
             const resultsSection = document.getElementById('resultsSection');
             const resultsBody = document.getElementById('resultsBody');
             const analyzeBtn = document.getElementById('analyzeBtn');
+            const analyzeBtnContainer = document.getElementById('analyzeBtnContainer');
+            const processingStatus = document.getElementById('processingStatus');
+            
+            // ✅ Stocker les résultats temporairement
+            let currentJobId = null;
+            let jobResults = {};
 
+            // Initialiser les tooltips Bootstrap
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
+            // Event listeners pour les boutons de prompt
+            document.getElementById('resetPrompt')?.addEventListener('click', () => setPrompt('default'));
+            document.getElementById('promptManga')?.addEventListener('click', () => setPrompt('manga'));
+            document.getElementById('promptGame')?.addEventListener('click', () => setPrompt('game'));
+            document.getElementById('promptTech')?.addEventListener('click', () => setPrompt('tech'));
+            document.getElementById('promptAdmin')?.addEventListener('click', () => setPrompt('admin'));
+
+            // Gestion du drag & drop
             uploadArea.addEventListener('click', () => fileInput.click());
             
             uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault(); uploadArea.classList.add('dragover');
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
             });
             
             uploadArea.addEventListener('dragleave', () => {
@@ -215,38 +436,222 @@
             });
             
             uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault(); uploadArea.classList.remove('dragover');
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                
                 const files = e.dataTransfer.files;
-                if (files.length > 0) fileInput.files = files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    updateFileInfo(files[0]);
+                }
             });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    updateFileInfo(e.target.files[0]);
+                }
+            });
+
+            function updateFileInfo(file) {
+                const fileSize = (file.size / 1024 / 1024).toFixed(2);
+                const fileType = file.type || 'Unknown';
+                
+                let html = `
+                    <div class="d-flex align-items-center">
+                        <div class="file-details">
+                            <strong><i class="fas fa-file"></i> ${file.name}</strong><br>
+                            <small class="text-muted">
+                                <i class="fas fa-database"></i> ${fileSize} MB | 
+                                <i class="fas fa-tag"></i> ${fileType}
+                            </small>
+                        </div>
+                `;
+                
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const previewHtml = `<img src="${e.target.result}" alt="Aperçu" class="img-thumbnail">`;
+                        filePreview.innerHTML = html + previewHtml + '</div>';
+                        filePreview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    filePreview.innerHTML = html + '</div>';
+                    filePreview.style.display = 'block';
+                }
+            }
+
+            function showToast(message, type = 'success') {
+                const toast = document.createElement('div');
+                toast.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+                toast.style.zIndex = '9999';
+                toast.innerHTML = `<i class="fas fa-check"></i> ${message}`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            }
+
+            // Connexion au stream de logs
+            function connectToLogs(jobId) {
+                currentJobId = jobId;
+                progressContainer.style.display = 'block';
+                logsContainer.style.display = 'block';
+                processingStatus.style.display = 'block';
+                analyzeBtnContainer.classList.add('btn-hidden');
+                
+                logsContent.innerHTML = '';
+                
+                const eventSource = new EventSource(`/api/logs/${jobId}`);
+                
+                eventSource.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.error) {
+                        const logDiv = document.createElement('div');
+                        logDiv.className = 'log-entry log-error';
+                        logDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${data.error}`;
+                        logsContent.appendChild(logDiv);
+                        eventSource.close();
+                        analyzeBtnContainer.classList.remove('btn-hidden');
+                        processingStatus.style.display = 'none';
+                        return;
+                    }
+                    
+                    if (data.type === 'progress') {
+                        const progress = Math.round(data.progress);
+                        progressBar.style.width = progress + '%';
+                        progressPercent.textContent = progress + '%';
+                        progressText.innerHTML = `<strong><i class="fas fa-spinner fa-spin"></i> {{ translations.progress_processing }}</strong>`;
+                        if (data.current_page && data.total_pages) {
+                            progressDetails.textContent = `Page ${data.current_page} / ${data.total_pages}`;
+                        }
+                    }
+                    
+                    if (data.type === 'log') {
+                        const log = data.log;
+                        const logDiv = document.createElement('div');
+                        logDiv.className = `log-entry log-${log.level}`;
+                        
+                        let icon = 'fa-info-circle';
+                        let color = 'info';
+                        if (log.level === 'success') { icon = 'fa-check-circle'; color = 'success'; }
+                        else if (log.level === 'warning') { icon = 'fa-exclamation-triangle'; color = 'warning'; }
+                        else if (log.level === 'error') { icon = 'fa-times-circle'; color = 'danger'; }
+                        
+                        const time = new Date(log.timestamp * 1000).toLocaleTimeString();
+                        logDiv.innerHTML = `
+                            <small class="text-muted">${time}</small> 
+                            <i class="fas ${icon} text-${color}"></i> 
+                            ${log.message}
+                        `;
+                        logsContent.appendChild(logDiv);
+                        logsContent.scrollTop = logsContent.scrollHeight;
+                    }
+                    
+                    if (data.type === 'status' && data.status === 'complete') {
+                        progressBar.classList.remove('progress-bar-animated');
+                        progressText.innerHTML = `<strong><i class="fas fa-check-circle"></i> {{ translations.progress_complete }}</strong>`;
+                        progressBar.className = 'progress-bar bg-success';
+                        
+                        if (jobResults[currentJobId]) {
+                            showResults(jobResults[currentJobId]);
+                        }
+                        
+                        processingStatus.style.display = 'none';
+                        analyzeBtnContainer.classList.remove('btn-hidden');
+                        eventSource.close();
+                    }
+                };
+                
+                eventSource.onerror = function(err) {
+                    console.error('Erreur SSE:', err);
+                    eventSource.close();
+                    analyzeBtnContainer.classList.remove('btn-hidden');
+                    processingStatus.style.display = 'none';
+                };
+            }
 
             uploadForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                
                 const formData = new FormData(uploadForm);
-                if (!fileInput.files[0]) { alert('{{ translations.select_file }}'); return; }
+                
+                if (!fileInput.files[0]) {
+                    alert('Veuillez sélectionner un fichier');
+                    return;
+                }
 
                 analyzeBtn.disabled = true;
                 analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> {{ translations.launch }}...';
+                resultsSection.style.display = 'none';
+                filePreview.style.display = 'none';
 
                 try {
-                    const response = await fetch('/upload', { method: 'POST', body: formData });
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
                     const result = await response.json();
-                    if (response.ok) showResults(result); else alert(`{{ translations.error }}: ${result.error}`);
+
+                    if (response.ok) {
+                        jobResults[result.job_id] = result;
+                        connectToLogs(result.job_id);
+                    } else {
+                        alert(`{{ translations.error }}: ${result.error}`);
+                        progressContainer.style.display = 'none';
+                        logsContainer.style.display = 'none';
+                        analyzeBtnContainer.classList.remove('btn-hidden');
+                        processingStatus.style.display = 'none';
+                    }
                 } catch (error) {
+                    console.error('Erreur:', error);
                     alert('{{ translations.error }}');
+                    progressContainer.style.display = 'none';
+                    logsContainer.style.display = 'none';
+                    analyzeBtnContainer.classList.remove('btn-hidden');
+                    processingStatus.style.display = 'none';
                 } finally {
-                    analyzeBtn.disabled = false; analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
                 }
             });
 
-            function showResults(result) {
+            // ✅ Afficher les résultats avec noms de fichiers cliquables
+            function showResults() {
+                if (!currentJobId || !jobResults[currentJobId]) return;
+                
+                const result = jobResults[currentJobId];
                 resultsSection.style.display = 'block';
-                let html = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> {{ translations.success }} <a href="/results/${result.job_id}" class="btn btn-sm btn-success float-end">{{ translations.view_results }}</a></div><p><strong>{{ translations.job_id }}:</strong> ${result.job_id}</p>`;
+                
+                let html = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> {{ translations.success }}
+                        <a href="/results/${result.job_id}" class="btn btn-sm btn-success float-end">
+                            <i class="fas fa-external-link-alt"></i> {{ translations.view_results }}
+                        </a>
+                    </div>
+                    <p><strong>{{ translations.job_id }}:</strong> ${result.job_id}</p>
+                `;
+
                 if (result.files && result.files.length > 0) {
                     html += '<h6>{{ translations.files_generated }}:</h6><ul class="list-unstyled">';
-                    result.files.forEach(file => html += `<li><i class="fas fa-file"></i> ${file.name} <a href="${file.url}" class="btn btn-sm btn-link">{{ translations.download }}</a></li>`);
+                    result.files.forEach(file => {
+                        html += `
+                            <li class="mb-2">
+                                <i class="fas fa-file"></i> 
+                                <a href="${file.url.replace('/download/', '/view/')}" target="_blank">
+                                    <strong>${file.name}</strong>
+                                </a>
+                                <a href="${file.url}" class="btn btn-sm btn-link">{{ translations.download }}</a>
+                                <a href="${file.url.replace('/download/', '/view/')}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                    <i class="fas fa-eye"></i> Voir
+                                </a>
+                            </li>
+                        `;
+                    });
                     html += '</ul>';
                 }
+
                 resultsBody.innerHTML = html;
                 resultsSection.scrollIntoView({ behavior: 'smooth' });
             }

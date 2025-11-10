@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ translations.title }} - {{ translations.recent_jobs }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .job-card { transition: transform 0.2s; cursor: pointer; }
+        .job-card:hover { transform: translateY(-5px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .preview-modal { max-width: 90vw; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/"><i class="fas fa-arrow-left"></i> {{ translations.back }}</a>
+            <span class="navbar-text text-white">{{ translations.recent_jobs }}</span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row" id="jobsContainer">
+            <!-- Les jobs seront injectés ici -->
+        </div>
+    </div>
+
+    <!-- Modal de visualisation -->
+    <div class="modal fade" id="previewModal" tabindex="-1">
+        <div class="modal-dialog modal-lg preview-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="previewTitle">Visualisation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="previewBody">
+                    <!-- Contenu du fichier -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const lang = '{{ lang }}';
+        const translations = {{ translations | tojson }};
+
+        async function loadJobs() {
+            try {
+                const response = await fetch('/api/jobs');
+                const jobs = await response.json();
+                const container = document.getElementById('jobsContainer');
+                
+                if (jobs.length === 0) {
+                    container.innerHTML = `
+                        <div class="col-12 text-center text-white">
+                            <i class="fas fa-folder-open fa-3x mb-3"></i>
+                            <p>Aucune analyse trouvée</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = jobs.map(job => `
+                    <div class="col-md-4 mb-4">
+                        <div class="card job-card h-100" onclick="viewJob('${job.id}')">
+                            <div class="card-header bg-primary text-white">
+                                <i class="fas fa-folder"></i> Job ${job.id}
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text">
+                                    <i class="fas fa-calendar"></i> ${new Date(job.created * 1000).toLocaleString('fr-FR')}<br>
+                                    <i class="fas fa-file-alt"></i> ${job.files_count} fichier(s)
+                                </p>
+                            </div>
+                            <div class="card-footer">
+                                <small class="text-muted">Cliquez pour voir les résultats</small>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        function viewJob(jobId) {
+            window.location.href = `/results/${jobId}`;
+        }
+
+        // Charger les jobs au démarrage
+        loadJobs();
+    </script>
+</body>
+</html>

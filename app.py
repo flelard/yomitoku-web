@@ -3,24 +3,103 @@ import uuid
 import subprocess
 import requests
 import time
+import json
+import threading
+from collections import deque
 from pathlib import Path
-from flask import Flask, render_template, request, send_file, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, send_file, jsonify, session, redirect, url_for, Response
 from werkzeug.utils import secure_filename
+from concurrent.futures import ThreadPoolExecutor
+import atexit
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cle-multilingue-yomitoku-ollama-2024'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['OUTPUT_FOLDER'] = 'output'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
-app.config['OLLAMA_TIMEOUT'] = 300  # 5 minutes max pour traduction
-app.config['OLLAMA_MODEL'] = 'qwen3:8b'  # Modèle par défaut
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+app.config['OLLAMA_TIMEOUT'] = 300
+app.config['OLLAMA_MODEL'] = 'qwen3:8b'
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
+AVAILABLE_OLLAMA_MODELS = []
+
+# Thread pool pour exécuter les jobs en arrière-plan
+executor = ThreadPoolExecutor(max_workers=3)
+atexit.register(lambda: executor.shutdown(wait=True))
+
+# Stockage des données de job
+job_data = {}
+data_lock = threading.Lock()
+
+def log_to_job(job_id, message, level='info', progress=None):
+    """Ajoute un log et/ou une progression au job avec thread safety"""
+    with data_lock:
+        if job_id not in job_data:
+            job_data[job_id] = {
+                'logs': deque(maxlen=1000),
+                'progress': 0,
+                'status': 'running',
+                'current_page': None,
+                'total_pages': None
+            }
+        
+        job_data[job_id]['logs'].append({
+            'timestamp': time.time(),
+            'message': message,
+            'level': level
+        })
+        
+        if progress is not None:
+            job_data[job_id]['progress'] = progress
+        
+        # Détecter la progression dans le message
+        if 'Processing page' in message:
+            parts = message.split()
+            try:
+                current = int(parts[2].split('/')[0])
+                total = int(parts[2].split('/')[1])
+                job_data[job_id]['progress'] = (current / total) * 100
+                job_data[job_id]['current_page'] = current
+                job_data[job_id]['total_pages'] = total
+            except:
+                pass
+    
+    print(f"[{job_id}] {message}")
+
+def detect_ollama_models():
+    """Détecte les modèles Ollama disponibles au démarrage"""
+    global AVAILABLE_OLLAMA_MODELS
+    print(f"\n{'='*60}")
+    print("🔍 DÉTECTION DES MODÈLES OLLAMA...")
+    
+    try:
+        response = requests.get('http://127.0.0.1:11434/api/tags', timeout=5)
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            AVAILABLE_OLLAMA_MODELS = [m['name'] for m in models]
+            print(f"✅ {len(AVAILABLE_OLLAMA_MODELS)} modèles détectés:")
+            for model in AVAILABLE_OLLAMA_MODELS:
+                print(f"   📦 {model}")
+            print(f"{'='*60}\n")
+            return True
+        else:
+            print(f"❌ Erreur Ollama: {response.status_code}")
+            return False
+    except requests.exceptions.ConnectionError:
+        print("❌ Ollama n'est pas accessible sur 127.0.0.1:11434")
+        print("💡 Démarrez Ollama avec: sudo systemctl start ollama")
+        print(f"{'='*60}\n")
+        return False
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        print(f"{'='*60}\n")
+        return False
+
+# Détection des modèles au démarrage
 print(f"🚀 DÉMARRAGE SERVEUR YOMITOKU + OLLAMA")
-print(f"📦 Modèle Ollama configuré: {app.config['OLLAMA_MODEL']}")
-print(f"⏱️  Timeout: {app.config['OLLAMA_TIMEOUT']}s")
+detect_ollama_models()
 
 # Traductions complètes
 TRANSLATIONS = {
@@ -28,6 +107,7 @@ TRANSLATIONS = {
         'title': 'Yomitoku + Ollama',
         'subtitle': 'Analyse & Traduction de documents',
         'select_file': 'Sélectionnez un document',
+        'format_label': 'Format de sortie',
         'formats': {
             'md': 'Markdown',
             'html': 'HTML',
@@ -53,6 +133,8 @@ TRANSLATIONS = {
             'de': 'Allemand'
         },
         'ollama_model': 'Modèle Ollama',
+        'custom_prompt': 'Prompt personnalisé (optionnel)',
+        'custom_prompt_help': 'Laissez vide pour utiliser le prompt par défaut. Variables disponibles: {text}, {target_lang}',
         'launch': 'Lancer l\'analyse',
         'drag_drop': 'Glissez-déposez votre fichier ici ou cliquez pour sélectionner',
         'success': 'Analyse terminée !',
@@ -67,12 +149,29 @@ TRANSLATIONS = {
         'translated_files': 'Fichiers traduits',
         'no_files': 'Aucun fichier trouvé',
         'back': 'Retour',
-        'recent_jobs': 'Analyses récentes'
+        'recent_jobs': 'Analyses récentes',
+        'no_models': 'Aucun modèle Ollama détecté',
+        'refresh_models': 'Actualiser les modèles',
+        # Tooltips
+        'tooltip_vis': 'Génère une image avec les zones de texte détectées encadrées',
+        'tooltip_lite': 'Utilise un modèle plus rapide mais moins précis pour l\'OCR',
+        'tooltip_figure': 'Extrait les graphiques et images du document en fichiers séparés',
+        'tooltip_figure_letter': 'Détecte et extrait le texte présent à l\'intérieur des figures',
+        'tooltip_ignore_line_break': 'Supprime les sauts de ligne pour créer un texte continu',
+        'tooltip_combine': 'Combine toutes les pages en un seul fichier de résultat',
+        'tooltip_ignore_meta': 'Ignore les en-têtes, pieds de page et numéros de page',
+        'tooltip_translate': 'Active la traduction automatique via Ollama après l\'OCR',
+        # Progression
+        'progress_processing': 'Traitement en cours...',
+        'progress_page': 'Page',
+        'progress_of': 'sur',
+        'progress_complete': 'Analyse terminée !'
     },
     'en': {
         'title': 'Yomitoku + Ollama',
         'subtitle': 'Document Analysis & Translation',
         'select_file': 'Select a document',
+        'format_label': 'Output Format',
         'formats': {
             'md': 'Markdown',
             'html': 'HTML',
@@ -98,6 +197,8 @@ TRANSLATIONS = {
             'de': 'German'
         },
         'ollama_model': 'Ollama Model',
+        'custom_prompt': 'Custom prompt (optional)',
+        'custom_prompt_help': 'Leave empty for default prompt. Available variables: {text}, {target_lang}',
         'launch': 'Launch Analysis',
         'drag_drop': 'Drag & drop your file here or click to select',
         'success': 'Analysis completed!',
@@ -112,12 +213,29 @@ TRANSLATIONS = {
         'translated_files': 'Translated Files',
         'no_files': 'No files found',
         'back': 'Back',
-        'recent_jobs': 'Recent Analyses'
+        'recent_jobs': 'Recent Analyses',
+        'no_models': 'No Ollama models detected',
+        'refresh_models': 'Refresh models',
+        # Tooltips
+        'tooltip_vis': 'Generates an image with detected text areas framed',
+        'tooltip_lite': 'Uses a faster but less accurate model for OCR',
+        'tooltip_figure': 'Extracts charts and images from the document as separate files',
+        'tooltip_figure_letter': 'Detects and extracts text inside figures and charts',
+        'tooltip_ignore_line_break': 'Removes line breaks to create continuous text',
+        'tooltip_combine': 'Combines all pages into a single result file',
+        'tooltip_ignore_meta': 'Ignores headers, footers and page numbers',
+        'tooltip_translate': 'Enables automatic translation via Ollama after OCR',
+        # Progression
+        'progress_processing': 'Processing...',
+        'progress_page': 'Page',
+        'progress_of': 'of',
+        'progress_complete': 'Analysis completed!'
     },
     'ja': {
         'title': 'Yomitoku + Ollama',
         'subtitle': '文書分析 & 翻訳',
         'select_file': '文書を選択',
+        'format_label': '出力形式',
         'formats': {
             'md': 'Markdown',
             'html': 'HTML',
@@ -128,7 +246,7 @@ TRANSLATIONS = {
         'options': '高度なオプション',
         'trans_options': '翻訳オプション',
         'vis': '可視化を生成',
-        'lite': 'ライトモード（高速）',
+        'lite': 'ライトモード(高速)',
         'figure': '図をエクスポート',
         'figure_letter': '図内の文字',
         'ignore_line_break': '改行を無視',
@@ -143,12 +261,14 @@ TRANSLATIONS = {
             'de': 'ドイツ語'
         },
         'ollama_model': 'Ollamaモデル',
+        'custom_prompt': 'カスタムプロンプト(オプション)',
+        'custom_prompt_help': 'デフォルトプロンプトを使用する場合は空白のままにします。利用可能な変数: {text}, {target_lang}',
         'launch': '分析を開始',
-        'drag_drop': 'ここにファイルをドラッグ＆ドロップ、またはクリックして選択',
-        'success': '分析が完了しました！',
+        'drag_drop': 'ここにファイルをドラッグ&ドロップ、またはクリックして選択',
+        'success': '分析が完了しました!',
         'translating': '翻訳中...',
         'error': 'エラー',
-        'error_ollama': 'Ollamaエラー（起動していません？）',
+        'error_ollama': 'Ollamaエラー(起動していません?)',
         'download': 'ダウンロード',
         'view_results': '結果を表示',
         'job_id': 'ジョブID',
@@ -157,7 +277,23 @@ TRANSLATIONS = {
         'translated_files': '翻訳済みファイル',
         'no_files': 'ファイルが見つかりません',
         'back': '戻る',
-        'recent_jobs': '最近の分析'
+        'recent_jobs': '最近の分析',
+        'no_models': 'Ollamaモデルが検出されません',
+        'refresh_models': 'モデルを更新',
+        # Tooltips
+        'tooltip_vis': '検出されたテキストエリアをフレームで囲んだ画像を生成します',
+        'tooltip_lite': 'OCR用により高速ですが精度の低いモデルを使用します',
+        'tooltip_figure': 'ドキュメントからグラフや画像を別ファイルとして抽出します',
+        'tooltip_figure_letter': '図やグラフ内のテキストを検出して抽出します',
+        'tooltip_ignore_line_break': '改行を削除して連続テキストを作成します',
+        'tooltip_combine': 'すべてのページを1つの結果ファイルに結合します',
+        'tooltip_ignore_meta': 'ヘッダー、フッター、ページ番号を無視します',
+        'tooltip_translate': 'OCR後にOllamaによる自動翻訳を有効にします',
+        # Progression
+        'progress_processing': '処理中...',
+        'progress_page': 'ページ',
+        'progress_of': '／',
+        'progress_complete': '分析が完了しました!'
     }
 }
 
@@ -172,93 +308,147 @@ def get_job_path(job_id):
 def get_lang():
     return session.get('lang', 'fr')
 
-def translate_with_ollama(text, target_lang='fr', model=None):
+def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None, job_id=None):
     """Traduit le texte avec Ollama local"""
-    print(f"\n{'='*60}")
-    print(f"🔄 [TRADUCTION] Début pour langue: {target_lang}")
-    print(f"📝 [TRADUCTION] Modèle: {model or app.config['OLLAMA_MODEL']}")
-    print(f"📝 [TRADUCTION] Texte source (200 premiers car): {text[:200]}...")
-    print(f"📊 [TRADUCTION] Taille totale: {len(text)} caractères")
+    log_to_job(job_id, f"🔄 Début traduction vers {target_lang}", 'info')
+    log_to_job(job_id, f"📝 Modèle: {model or app.config['OLLAMA_MODEL']}", 'info')
     
-    # Vérifier si le texte est vide
     if len(text.strip()) < 50:
-        print("⚠️  [TRADUCTION] Texte trop court pour traduction (< 50 car)")
+        log_to_job(job_id, "⚠️ Texte trop court pour traduction (< 50 car)", 'warning')
         return text
     
-    # Compter les caractères japonais
     jap_chars = sum(1 for c in text if '\u3040' <= c <= '\u30FF' or '\u4E00' <= c <= '\u9FFF')
-    print(f"🔍 [TRADUCTION] Caractères japonais détectés: {jap_chars}")
+    log_to_job(job_id, f"🔍 Caractères japonais détectés: {jap_chars}", 'info')
     
     if jap_chars < 50:
-        print("⚠️  [TRADUCTION] Peu de caractères japonais, traduction annulée")
+        log_to_job(job_id, "⚠️ Peu de caractères japonais, traduction annulée", 'warning')
         return text + "\n\n[⚠️ Texte non-japonais détecté, traduction ignorée]"
     
     try:
-        # Choisir le modèle
         model_to_use = model or app.config['OLLAMA_MODEL']
         
-        # TEST CONNEXION
-        print(f"🔌 [TRADUCTION] Test connexion Ollama sur localhost:11434...")
-        ollama_check = requests.get('http://localhost:11434/api/tags', timeout=5)
-        print(f"✅ [TRADUCTION] Ollama OK: {ollama_check.status_code}")
-        
-        # Vérifier modèle disponible
-        models = ollama_check.json().get('models', [])
-        model_names = [m['name'] for m in models]
-        print(f"📦 [TRADUCTION] Modèles disponibles: {model_names}")
-        
-        if model_to_use not in model_names:
-            print(f"❌ [TRADUCTION] Modèle {model_to_use} non trouvé !")
-            return f"❌ ERROR: Model '{model_to_use}' not found. Available: {', '.join(model_names)}"
-        
-        # Prompt optimisé
-        prompt = f"""You are a professional translator. Translate this Japanese text to {target_lang}.
-        Return ONLY the translation, nothing else:
-        
-        {text[:4000]}"""  # Limiter à 4000 caractères pour performance
-        
-        print(f"⏱️  [TRADUCTION] Envoi à Ollama (modèle: {model_to_use})...")
-        start_time = time.time()
-        
         response = requests.post(
-            'http://localhost:11434/api/generate',
+            'http://127.0.0.1:11434/api/generate',
             json={
                 "model": model_to_use,
-                "prompt": prompt,
+                "prompt": f"Translate this Japanese text to {target_lang}. Return ONLY the translation:\n\n{text}",
                 "stream": False,
-                "options": {
-                    "temperature": 0.1,
-                    "top_p": 0.9,
-                    "num_predict": 3000
-                }
+                "options": {"temperature": 0.1, "top_p": 0.9, "num_predict": 8000}
             },
             timeout=app.config['OLLAMA_TIMEOUT']
         )
         
-        elapsed = time.time() - start_time
-        print(f"✅ [TRADUCTION] Réponse reçue en {elapsed:.2f}s")
-        print(f"📊 [TRADUCTION] Statut: {response.status_code}")
-        
         if response.status_code == 200:
             translated = response.json()['response'].strip()
-            print(f"🎯 [TRADUCTION] Texte traduit (200 premiers car): {translated[:200]}")
+            log_to_job(job_id, f"✅ Traduction terminée ({len(translated)} car)", 'success')
             return translated
         else:
-            print(f"❌ [TRADUCTION] Erreur Ollama: {response.status_code} - {response.text}")
+            log_to_job(job_id, f"❌ Erreur Ollama: {response.status_code}", 'error')
             return f"❌ Translation failed: {response.status_code}"
             
     except requests.exceptions.ConnectionError:
-        print("❌ [TRADUCTION] ERREUR: Ollama non accessible sur localhost:11434")
-        return "❌ ERROR: Ollama not running. Start with 'sudo systemctl start ollama'"
+        log_to_job(job_id, "❌ ERREUR: Ollama non accessible", 'error')
+        return "❌ ERROR: Ollama not running"
     except Exception as e:
-        print(f"❌ [TRADUCTION] Exception: {type(e).__name__}: {str(e)}")
+        log_to_job(job_id, f"❌ Exception: {type(e).__name__}: {str(e)}", 'error')
         return f"❌ Translation error: {str(e)}"
+
+def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path):
+    """Exécute Yomitoku et la traduction en arrière-plan"""
+    try:
+        log_to_job(job_id, f"📄 NOUVELLE ANALYSE - Job ID: {job_id}", 'info')
+        log_to_job(job_id, f"📝 Fichier: {input_path.name} ({input_path.stat().st_size} bytes)", 'info')
+        log_to_job(job_id, f"🔧 Commande: {' '.join(cmd)}", 'info')
+        
+        # Démarrer Yomitoku
+        log_to_job(job_id, "⏳ Démarrage d'Yomitoku...", 'info')
+        
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1
+        )
+        
+        # Lire la sortie EN TEMPS RÉEL
+        for line in iter(process.stdout.readline, ''):
+            if line:
+                line = line.strip()
+                
+                # Capturer la progression
+                if 'Processing page' in line:
+                    parts = line.split()
+                    try:
+                        current = int(parts[2].split('/')[0])
+                        total = int(parts[2].split('/')[1])
+                        progress = (current / total) * 100
+                        log_to_job(job_id, line, 'info', progress)
+                    except:
+                        log_to_job(job_id, line, 'info')
+                else:
+                    log_to_job(job_id, line, 'info')
+        
+        returncode = process.wait()
+        
+        if returncode != 0:
+            log_to_job(job_id, f"❌ Erreur Yomitoku (code {returncode})", 'error')
+            with data_lock:
+                job_data[job_id]['status'] = 'error'
+            return
+        
+        log_to_job(job_id, "✅ Analyse Yomitoku terminée", 'success')
+        
+        # TRADUCTION
+        if translate_enabled:
+            log_to_job(job_id, f"\n🌍 TRADUCTION vers {target_lang} avec {ollama_model}", 'info')
+            results_dir = job_path / 'results'
+            
+            files_to_translate = []
+            for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv']:
+                files_to_translate.extend(results_dir.glob(ext))
+            
+            log_to_job(job_id, f"📄 Fichiers à traduire: {len(files_to_translate)}", 'info')
+            
+            if not files_to_translate:
+                log_to_job(job_id, "❌ Aucun fichier texte trouvé !", 'error')
+            
+            for i, file_path in enumerate(files_to_translate[:2]):
+                log_to_job(job_id, f"\n📝 Traduction fichier {i+1}/{len(files_to_translate)}: {file_path.name}", 'info')
+                
+                try:
+                    text = file_path.read_text(encoding='utf-8', errors='ignore')
+                    log_to_job(job_id, f"📊 Taille texte: {len(text)} caractères", 'info')
+                    
+                    translated = translate_with_ollama(text, target_lang, ollama_model, custom_prompt, job_id)
+                    
+                    if translated and not translated.startswith('❌'):
+                        translated_file = results_dir / f"translated_{target_lang}_{file_path.name}"
+                        translated_file.write_text(translated, encoding='utf-8')
+                        log_to_job(job_id, f"✅ Sauvegardé: {translated_file.name}", 'success')
+                    else:
+                        log_to_job(job_id, f"❌ Échec: {translated}", 'error')
+                        
+                except Exception as e:
+                    log_to_job(job_id, f"❌ Exception: {e}", 'error')
+        
+        # Finaliser
+        with data_lock:
+            job_data[job_id]['status'] = 'complete'
+            job_data[job_id]['progress'] = 100
+            
+    except Exception as e:
+        log_to_job(job_id, f"❌ Exception générale: {str(e)}", 'error')
+        with data_lock:
+            job_data[job_id]['status'] = 'error'
 
 @app.route('/')
 def index():
     lang = get_lang()
-    print(f"🌐 Page chargée en: {lang}")
-    return render_template('index.html', lang=lang, translations=TRANSLATIONS[lang])
+    return render_template('index.html', 
+                         lang=lang, 
+                         translations=TRANSLATIONS[lang],
+                         ollama_models=AVAILABLE_OLLAMA_MODELS)
 
 @app.route('/set_lang/<lang>')
 def set_language(lang):
@@ -266,6 +456,93 @@ def set_language(lang):
         session['lang'] = lang
         print(f"🌐 Changement langue: {lang}")
     return redirect(request.referrer or url_for('index'))
+
+@app.route('/api/ollama/models')
+def get_ollama_models():
+    """API pour récupérer la liste des modèles Ollama"""
+    try:
+        response = requests.get('http://127.0.0.1:11434/api/tags', timeout=5)
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            model_names = [m['name'] for m in models]
+            global AVAILABLE_OLLAMA_MODELS
+            AVAILABLE_OLLAMA_MODELS = model_names
+            print(f"✅ API /api/ollama/models : {len(model_names)} modèles trouvés")
+            
+            return jsonify({
+                'models': model_names,
+                'count': len(model_names),
+                'status': 'ok'
+            })
+        else:
+            print(f"❌ Ollama API erreur: {response.status_code}")
+            return jsonify({
+                'models': [],
+                'count': 0,
+                'status': 'error',
+                'message': f'Ollama returned status {response.status_code}'
+            }), 500
+    except requests.exceptions.ConnectionError:
+        print("❌ Ollama non accessible sur 127.0.0.1:11434")
+        return jsonify({
+            'models': [],
+            'count': 0,
+            'status': 'error',
+            'message': 'Ollama is not running on the server (127.0.0.1:11434)'
+        }), 503
+    except Exception as e:
+        print(f"❌ Exception API: {e}")
+        return jsonify({
+            'models': [],
+            'count': 0,
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/logs/<job_id>')
+def stream_logs(job_id):
+    """Stream les logs en temps réel via Server-Sent Events"""
+    def generate():
+        timeout = 0
+        while job_id not in job_data and timeout < 30:
+            time.sleep(0.1)
+            timeout += 0.1
+        
+        if job_id not in job_data:
+            yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+            return
+        
+        last_log_count = 0
+        last_progress = 0
+        
+        while True:
+            with data_lock:
+                data = job_data.get(job_id, {})
+                logs = list(data.get('logs', []))
+                progress = data.get('progress', 0)
+                status = data.get('status', 'running')
+                current_page = data.get('current_page')
+                total_pages = data.get('total_pages')
+            
+            # Envoyer nouveaux logs
+            if len(logs) > last_log_count:
+                for log in logs[last_log_count:]:
+                    yield f"data: {json.dumps({'type': 'log', 'log': log})}\n\n"
+                last_log_count = len(logs)
+            
+            # Envoyer progression si changée
+            if progress != last_progress:
+                yield f"data: {json.dumps({'type': 'progress', 'progress': progress, 'current_page': current_page, 'total_pages': total_pages})}\n\n"
+                last_progress = progress
+            
+            # Vérifier fin
+            if status in ['complete', 'error']:
+                yield f"data: {json.dumps({'type': 'status', 'status': status})}\n\n"
+                break
+            
+            time.sleep(0.2)
+    
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -287,134 +564,29 @@ def upload_file():
     input_path = job_path / filename
     file.save(input_path)
     
-    print(f"\n{'='*70}")
-    print(f"📄 NOUVELLE ANALYSE - Job ID: {job_id}")
-    print(f"📝 Fichier: {filename}")
-    
-    # Options
+    # Construire la commande
     output_format = request.form.get('format', 'md')
-    visualization = 'vis' in request.form
-    lite_mode = 'lite' in request.form
-    figure_export = 'figure' in request.form
-    figure_letter_export = 'figure_letter' in request.form
-    ignore_line_break = 'ignore_line_break' in request.form
-    combine_pages = 'combine' in request.form
-    ignore_meta = 'ignore_meta' in request.form
     device = request.form.get('device', 'cpu')
     translate_enabled = 'translate' in request.form
     target_lang = request.form.get('target_lang', 'fr')
     ollama_model = request.form.get('ollama_model', app.config['OLLAMA_MODEL'])
+    custom_prompt = request.form.get('custom_prompt', '').strip()
     
-    print(f"⚙️  Options: format={output_format}, device={device}, translate={translate_enabled}, model={ollama_model}")
-    
-    # Construire commande Yomitoku
     cmd = ['yomitoku', str(input_path), '-f', output_format, '-o', str(job_path / 'results'), '-d', device]
     
-    if visualization:
-        cmd.append('-v')
-    if lite_mode:
-        cmd.append('-l')
-    if figure_export:
-        cmd.append('--figure')
-    if figure_letter_export:
-        cmd.append('--figure_letter')
-    if ignore_line_break:
-        cmd.append('--ignore_line_break')
-    if combine_pages:
-        cmd.append('--combine')
-    if ignore_meta:
-        cmd.append('--ignore_meta')
+    if 'vis' in request.form: cmd.append('-v')
+    if 'lite' in request.form: cmd.append('-l')
+    if 'figure' in request.form: cmd.append('--figure')
+    if 'figure_letter' in request.form: cmd.append('--figure_letter')
+    if 'ignore_line_break' in request.form: cmd.append('--ignore_line_break')
+    if 'combine' in request.form: cmd.append('--combine')
+    if 'ignore_meta' in request.form: cmd.append('--ignore_meta')
     
-    print(f"🔧 Commande Yomitoku: {' '.join(cmd)}")
+    # DÉMARRER LE TRAITEMENT EN ARRIÈRE-PLAN (libère immédiatement la route)
+    executor.submit(run_yomitoku_job, job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path)
     
-    try:
-        # Analyse Yomitoku
-        print("⏳ Analyse Yomitoku en cours...")
-        start_time = time.time()
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-        elapsed = time.time() - start_time
-        
-        print(f"✅ Analyse terminée en {elapsed:.2f} secondes")
-        
-        if result.returncode != 0:
-            print(f"❌ Erreur Yomitoku: {result.stderr}")
-            return jsonify({'error': f'Yomitoku error: {result.stderr}'}), 500
-            
-    except subprocess.TimeoutExpired:
-        print("❌ Timeout Yomitoku (1 heure)")
-        return jsonify({'error': 'Analysis timeout (1 hour)'}), 500
-    except Exception as e:
-        print(f"❌ Exception Yomitoku: {str(e)}")
-        return jsonify({'error': f'Error: {str(e)}'}), 500
-    
-    results_dir = job_path / 'results'
-    print(f"📁 Dossier résultats: {results_dir}")
-    
-    # Lister TOUS les fichiers créés
-    print("📁 Fichiers créés par Yomitoku:")
-    all_files = list(results_dir.iterdir()) if results_dir.exists() else []
-    for f in all_files:
-        print(f"   - {f.name} ({f.stat().st_size} octets)")
-    
-    # Traduction si demandée
-    if translate_enabled:
-        print(f"\n🌍 TRADUCTION demandée vers {target_lang} avec {ollama_model}")
-        
-        # Chercher TOUS les fichiers texte
-        files_to_translate = []
-        for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv']:
-            files_to_translate.extend(results_dir.glob(ext))
-        
-        print(f"📄 Fichiers trouvés pour traduction: {len(files_to_translate)}")
-        
-        if not files_to_translate:
-            print("❌ Aucun fichier texte trouvé !")
-            print("💡 Conseil: Essayez de générer un format différent (ex: md)")
-        else:
-            print("📄 Fichiers à traduire:")
-            for f in files_to_translate:
-                print(f"   - {f.name}")
-        
-        for i, file_path in enumerate(files_to_translate[:2]):  # Max 2
-            print(f"\n📝 Traduction fichier {i+1}/{len(files_to_translate)}: {file_path.name}")
-            
-            try:
-                text = file_path.read_text(encoding='utf-8', errors='ignore')
-                print(f"📊 Taille texte: {len(text)} caractères")
-                
-                if len(text) > 10000:
-                    print("⚠️  Texte très long, limitation à 10000 caractères")
-                    text = text[:10000]
-                
-                translated = translate_with_ollama(text, target_lang, ollama_model)
-                
-                if translated and not translated.startswith('❌'):
-                    translated_file = results_dir / f"translated_{target_lang}_{file_path.name}"
-                    translated_file.write_text(translated, encoding='utf-8')
-                    print(f"✅ Sauvegardé: {translated_file.name}")
-                else:
-                    print(f"❌ Échec: {translated}")
-                    
-            except Exception as e:
-                print(f"❌ Exception: {e}")
-    else:
-        print("\n🌍 Traduction non demandée")
-    
-    # Préparer liste des fichiers
-    files_info = []
-    if results_dir.exists():
-        for file in results_dir.iterdir():
-            if file.is_file():
-                files_info.append({
-                    'name': file.name,
-                    'size': file.stat().st_size,
-                    'url': f'/download/{job_id}/{file.name}'
-                })
-    
-    print(f"✅ Job {job_id} terminé avec {len(files_info)} fichiers")
-    print(f"{'='*70}\n")
-    
-    return jsonify({'job_id': job_id, 'files': files_info, 'success': True})
+    # RETOURNER IMMÉDIATEMENT avec le job_id
+    return jsonify({'job_id': job_id, 'success': True, 'files': []})
 
 @app.route('/download/<job_id>/<filename>')
 def download_file(job_id, filename):
@@ -425,6 +597,38 @@ def download_file(job_id, filename):
         return "File not found", 404
     
     return send_file(file_path, as_attachment=True)
+
+@app.route('/view/<job_id>/<filename>')
+def view_file(job_id, filename):
+    """Affiche un fichier dans le navigateur (au lieu de le télécharger)"""
+    job_path = get_job_path(job_id)
+    file_path = job_path / 'results' / filename
+    
+    if not file_path.exists():
+        return "File not found", 404
+    
+    # Détecter le type MIME
+    mime_types = {
+        '.txt': 'text/plain',
+        '.md': 'text/markdown',
+        '.html': 'text/html',
+        '.json': 'application/json',
+        '.csv': 'text/csv',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.pdf': 'application/pdf'
+    }
+    
+    ext = file_path.suffix.lower()
+    mime_type = mime_types.get(ext, 'application/octet-stream')
+    
+    # Pour les fichiers texte, forcer l'encodage UTF-8
+    if ext in ['.txt', '.md', '.html', '.json', '.csv']:
+        return send_file(file_path, mimetype=mime_type, as_attachment=False)
+    
+    # Pour les images et PDFs, afficher dans le navigateur
+    return send_file(file_path, mimetype=mime_type, as_attachment=False)
 
 @app.route('/results/<job_id>')
 def view_results(job_id):
@@ -454,27 +658,82 @@ def view_results(job_id):
     return render_template('results.html', job_id=job_id, files=files, visualizations=visualizations,
                          translated_files=translated_files, lang=lang, translations=TRANSLATIONS[lang])
 
+# ===== NOUVELLES ROUTES =====
+
+@app.route('/jobs')
+def list_jobs_page():
+    """Page de navigation entre tous les jobs"""
+    lang = get_lang()
+    return render_template('jobs.html', 
+                         lang=lang, 
+                         translations=TRANSLATIONS[lang])
+
 @app.route('/api/jobs')
 def list_jobs():
+    """API améliorée pour lister les jobs avec plus d'infos"""
     jobs = []
     output_path = Path(app.config['OUTPUT_FOLDER'])
     
     for job_dir in output_path.iterdir():
-        if job_dir.is_dir():
+        if job_dir.is_dir() and (job_dir / 'results').exists():
             created = job_dir.stat().st_ctime
-            files_count = len(list((job_dir / 'results').glob('*'))) if (job_dir / 'results').exists() else 0
+            files_count = len(list((job_dir / 'results').glob('*')))
             
             jobs.append({
                 'id': job_dir.name,
                 'created': created,
-                'files_count': files_count
+                'files_count': files_count,
+                'has_visualizations': len(list((job_dir / 'results').glob('*.png'))) > 0,
+                'has_translations': len(list((job_dir / 'results').glob('translated_*'))) > 0
             })
     
     jobs.sort(key=lambda x: x['created'], reverse=True)
     return jsonify(jobs)
 
+@app.route('/api/job/<job_id>')
+def get_job_info(job_id):
+    """Obtenir les détails d'un job spécifique"""
+    job_path = get_job_path(job_id)
+    if not job_path.exists():
+        return jsonify({'error': 'Job not found'}), 404
+    
+    results_dir = job_path / 'results'
+    if not results_dir.exists():
+        return jsonify({'error': 'No results found'}), 404
+    
+    files = []
+    visualizations = []
+    translated_files = []
+    
+    for file in results_dir.iterdir():
+        if file.is_file():
+            file_info = {
+                'name': file.name,
+                'size': file.stat().st_size,
+                'url': url_for('download_file', job_id=job_id, filename=file.name),
+                'view_url': url_for('view_file', job_id=job_id, filename=file.name)
+            }
+            
+            if file.suffix.lower() in ['.jpg', '.jpeg', '.png'] and 'vis' in file.name:
+                visualizations.append(file_info)
+            elif file.name.startswith('translated_'):
+                translated_files.append(file_info)
+            else:
+                files.append(file_info)
+    
+    return jsonify({
+        'job_id': job_id,
+        'files': files,
+        'visualizations': visualizations,
+        'translated_files': translated_files,
+        'created': job_path.stat().st_ctime
+    })
+
 if __name__ == '__main__':
     print("🚀 DÉMARRAGE DU SERVEUR...")
-    print(f"🌐 Accédez à: http://<IP_VOTRE_SERVEUR>:5000")
-    print(f"📦 Modèle Ollama: {app.config['OLLAMA_MODEL']}")
+    print(f"🌐 Accédez à : http://<IP_VOTRE_SERVEUR>:5000")
+    if AVAILABLE_OLLAMA_MODELS:
+        print(f"📦 {len(AVAILABLE_OLLAMA_MODELS)} modèles Ollama détectés")
+    else:
+        print("⚠️  Aucun modèle Ollama détecté")
     app.run(debug=False, host='0.0.0.0', port=5000)
