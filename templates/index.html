@@ -422,12 +422,22 @@ Return ONLY the translation:
 
 {text}`,
 
-            admin: `You are a translator specialized in Japanese administrative documents. Translate this official document to {target_lang}.
-Use formal, precise language appropriate for administrative/legal contexts.
-Preserve dates, numbers, and official titles exactly as written.
-Maintain the structural format of the document.
-Return ONLY the translation:
+            admin: `
+Role :
+You are a professional translator specialized in Japanese administrative and government documents and translating into {target_lang}.
+Task :
+Translate the following HTML document from Japanese into formal, precise, and natural French, suitable for official publications.
+Guidelines :
+Preserve the HTML structure (tags such as <h1>, <p>, <table>, <tr>, <td>, <br>, etc.) without modification.
+Translate only the visible text content between tags (e.g., text inside <p>, <td>, <span>, etc.).
+Keep all dates, numbers, organization names, and titles exactly as written (do not modify or normalize them).
+Do not add, summarize, or invent information (strictly translate what is provided).
+Do not remove or modify any HTML tag, attribute, or structure.
+Return ONLY the translated HTML (no explanations, comments, or additional text).
+Example :
+If the input is <p>2023年4月1日</p>, the output should be <p>1er avril 2023</p>.
 
+Document to translate :
 {text}`
         };
 
