@@ -97,6 +97,35 @@ def detect_ollama_models():
         print(f"{'='*60}\n")
         return False
 
+def cleanup_gpu_memory(job_id=None):
+    """Libère la mémoire GPU (CUDA) pour éviter les OutOfMemory"""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            
+            # Obtenir les stats mémoire
+            allocated = torch.cuda.memory_allocated() / 1024**3  # GB
+            reserved = torch.cuda.memory_reserved() / 1024**3    # GB
+            
+            if job_id:
+                log_to_job(job_id, f"🧹 GPU nettoyé - Alloué: {allocated:.2f}GB, Réservé: {reserved:.2f}GB", 'info')
+            else:
+                print(f"🧹 GPU nettoyé - Alloué: {allocated:.2f}GB, Réservé: {reserved:.2f}GB")
+            
+            return True
+    except ImportError:
+        if job_id:
+            log_to_job(job_id, "ℹ️ PyTorch non disponible, skip nettoyage GPU", 'info')
+        return False
+    except Exception as e:
+        if job_id:
+            log_to_job(job_id, f"⚠️ Erreur nettoyage GPU: {e}", 'warning')
+        else:
+            print(f"⚠️ Erreur nettoyage GPU: {e}")
+        return False
+
 # Détection des modèles au démarrage
 print(f"🚀 DÉMARRAGE SERVEUR YOMITOKU + OLLAMA")
 detect_ollama_models()
@@ -310,8 +339,26 @@ def get_lang():
 
 def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None, job_id=None):
     """Traduit le texte avec Ollama local"""
-    log_to_job(job_id, f"🔄 Début traduction vers {target_lang}", 'info')
-    log_to_job(job_id, f"📝 Modèle: {model or app.config['OLLAMA_MODEL']}", 'info')
+    
+    # ✅ Mapper les codes de langue vers les noms complets
+    LANG_NAMES = {
+        'fr': 'French',
+        'en': 'English',
+        'es': 'Spanish',
+        'de': 'German',
+        'it': 'Italian',
+        'pt': 'Portuguese',
+        'nl': 'Dutch',
+        'ru': 'Russian',
+        'zh': 'Chinese',
+        'ja': 'Japanese',
+        'ko': 'Korean'
+    }
+    
+    target_lang_full = LANG_NAMES.get(target_lang, target_lang)
+    
+    log_to_job(job_id, f"📄 Début traduction vers {target_lang_full}", 'info')
+    log_to_job(job_id, f"🔧 Modèle: {model or app.config['OLLAMA_MODEL']}", 'info')
     
     if len(text.strip()) < 50:
         log_to_job(job_id, "⚠️ Texte trop court pour traduction (< 50 car)", 'warning')
@@ -327,11 +374,25 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
     try:
         model_to_use = model or app.config['OLLAMA_MODEL']
         
+        # ✅ CORRECTION : Utiliser le prompt personnalisé s'il existe
+        if custom_prompt and custom_prompt.strip():
+            # Remplacer les variables dans le prompt personnalisé avec le nom complet
+            final_prompt = custom_prompt.replace('{text}', text).replace('{target_lang}', target_lang_full)
+            log_to_job(job_id, "✨ Utilisation du prompt personnalisé", 'info')
+        else:
+            # Prompt par défaut si aucun prompt personnalisé
+            final_prompt = f"Translate this Japanese text to {target_lang_full}. Return ONLY the translation:\n\n{text}"
+            log_to_job(job_id, "📝 Utilisation du prompt par défaut", 'info')
+        
+        # Log du prompt utilisé (tronqué pour lisibilité)
+        prompt_preview = final_prompt[:200] + "..." if len(final_prompt) > 200 else final_prompt
+        log_to_job(job_id, f"💬 Prompt: {prompt_preview}", 'info')
+        
         response = requests.post(
             'http://127.0.0.1:11434/api/generate',
             json={
                 "model": model_to_use,
-                "prompt": f"Translate this Japanese text to {target_lang}. Return ONLY the translation:\n\n{text}",
+                "prompt": final_prompt,  # ✅ Utiliser le prompt préparé
                 "stream": False,
                 "options": {"temperature": 0.1, "top_p": 0.9, "num_predict": 8000}
             },
@@ -341,6 +402,17 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
         if response.status_code == 200:
             translated = response.json()['response'].strip()
             log_to_job(job_id, f"✅ Traduction terminée ({len(translated)} car)", 'success')
+            
+            # ✅ Libérer la VRAM GPU après traduction Ollama
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    log_to_job(job_id, "🧹 VRAM GPU libérée", 'info')
+            except Exception as cleanup_error:
+                log_to_job(job_id, f"⚠️ Nettoyage GPU échoué: {cleanup_error}", 'warning')
+            
             return translated
         else:
             log_to_job(job_id, f"❌ Erreur Ollama: {response.status_code}", 'error')
@@ -359,6 +431,9 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
         log_to_job(job_id, f"📄 NOUVELLE ANALYSE - Job ID: {job_id}", 'info')
         log_to_job(job_id, f"📝 Fichier: {input_path.name} ({input_path.stat().st_size} bytes)", 'info')
         log_to_job(job_id, f"🔧 Commande: {' '.join(cmd)}", 'info')
+        
+        # Nettoyage GPU avant Yomitoku
+        cleanup_gpu_memory(job_id)
         
         # Démarrer Yomitoku
         log_to_job(job_id, "⏳ Démarrage d'Yomitoku...", 'info')
@@ -391,6 +466,9 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
         
         returncode = process.wait()
         
+        # Nettoyage GPU après Yomitoku
+        cleanup_gpu_memory(job_id)
+        
         if returncode != 0:
             log_to_job(job_id, f"❌ Erreur Yomitoku (code {returncode})", 'error')
             with data_lock:
@@ -401,7 +479,11 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
         
         # TRADUCTION
         if translate_enabled:
-            log_to_job(job_id, f"\n🌍 TRADUCTION vers {target_lang} avec {ollama_model}", 'info')
+            log_to_job(job_id, f"\n🌐 TRADUCTION vers {target_lang} avec {ollama_model}", 'info')
+            
+            # Nettoyage GPU avant traduction
+            cleanup_gpu_memory(job_id)
+            
             results_dir = job_path / 'results'
             
             files_to_translate = []
@@ -431,6 +513,12 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
                         
                 except Exception as e:
                     log_to_job(job_id, f"❌ Exception: {e}", 'error')
+                
+                # Nettoyage GPU après chaque fichier
+                cleanup_gpu_memory(job_id)
+        
+        # Nettoyage GPU final
+        cleanup_gpu_memory(job_id)
         
         # Finaliser
         with data_lock:
@@ -441,6 +529,9 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
         log_to_job(job_id, f"❌ Exception générale: {str(e)}", 'error')
         with data_lock:
             job_data[job_id]['status'] = 'error'
+        
+        # Nettoyage GPU même en cas d'erreur
+        cleanup_gpu_memory(job_id)
 
 @app.route('/')
 def index():
