@@ -47,7 +47,7 @@ gpu_semaphore = threading.Semaphore(1)
 executor = ThreadPoolExecutor(max_workers=2)
 
 def shutdown_executor():
-    print("🛑 Arrêt de l'executor...")
+    print("🛑 Stopping executor...")
     executor.shutdown(wait=True)
 
 atexit.register(shutdown_executor)
@@ -104,10 +104,10 @@ def force_unload_ollama(job_id=None):
                     pass
                     
         if job_id and unloaded_count > 0:
-            log_to_job(job_id, f"🧠 Nettoyage Ollama: {len(running_models)} modèle(s) déchargé(s)", 'info')
+            log_to_job(job_id, f"🧠 Ollama Cleanup: {len(running_models)} model(s) unloaded", 'info')
             
     except Exception as e:
-        if job_id: log_to_job(job_id, f"⚠️ Erreur unload: {e}", 'warning')
+        if job_id: log_to_job(job_id, f"⚠️ Unload error: {e}", 'warning')
 
 def wait_for_vram(required_gb=3.0, timeout=30, job_id=None):
     """Boucle d'attente active qui bloque tant que la VRAM n'est pas libre"""
@@ -127,11 +127,11 @@ def wait_for_vram(required_gb=3.0, timeout=30, job_id=None):
             
         if free_gb >= required_gb:
             if job_id:
-                log_to_job(job_id, f"🔋 VRAM disponible: {free_gb:.2f}GB", 'success')
+                log_to_job(job_id, f"🔋 Available VRAM: {free_gb:.2f}GB", 'success')
             return True
             
         if int(time.time() - start_time) % 5 == 0 and job_id:
-            log_to_job(job_id, f"⏳ Attente VRAM... Libre: {free_gb:.2f}GB / {total_gb:.2f}GB", 'warning')
+            log_to_job(job_id, f"⏳ Waiting for VRAM... Free: {free_gb:.2f}GB / {total_gb:.2f}GB", 'warning')
             force_unload_ollama(job_id)
             
         time.sleep(2)
@@ -155,29 +155,29 @@ def run_yomitoku_job_with_lock(job_id, input_path, cmd, translate_enabled, targe
         try:
             acquired = gpu_lock.acquire(timeout=600)
             if acquired:
-                log_to_job(job_id, "🔒 Verrou GPU acquis (1 job à la fois)", 'info')
+                log_to_job(job_id, "🔒 GPU Lock acquired (1 job at a time)", 'info')
                 
                 # VÉRIFICATION VRAM AVANT LANCEMENT
                 vram_ok = wait_for_vram(required_gb=3.0, timeout=45, job_id=job_id)
                 
                 if not vram_ok:
                     free_gb, _ = get_gpu_memory_info()
-                    log_to_job(job_id, f"❌ ERREUR CRITIQUE: VRAM insuffisante ({free_gb:.2f}GB). Ollama bloque.", 'error')
+                    log_to_job(job_id, f"❌ CRITICAL ERROR: Insufficient VRAM ({free_gb:.2f}GB). Ollama is blocking.", 'error')
                     with data_lock:
                         job_data[job_id]['status'] = 'error'
                     return
 
                 run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
             else:
-                log_to_job(job_id, "❌ Timeout: Impossible d'acquérir le verrou GPU", 'error')
+                log_to_job(job_id, "❌ Timeout: Unable to acquire GPU lock", 'error')
                 with data_lock:
                     job_data[job_id]['status'] = 'error'
         finally:
             if acquired:
-                log_to_job(job_id, "🏁 Fin du job, nettoyage...", 'info')
+                log_to_job(job_id, "🏁 Job finished, cleaning up...", 'info')
                 force_unload_ollama(job_id)
                 gpu_lock.release()
-                log_to_job(job_id, "🔓 Verrou GPU libéré", 'info')
+                log_to_job(job_id, "🔓 GPU lock released", 'info')
     else:
         run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
 
@@ -217,23 +217,23 @@ def log_to_job(job_id, message, level='info', progress=None):
 def detect_ollama_models():
     global AVAILABLE_OLLAMA_MODELS
     print(f"\n{'='*60}")
-    print("🔍 DÉTECTION DES MODÈLES OLLAMA...")
+    print("🔍 DETECTING OLLAMA MODELS...")
     try:
         response = requests.get('http://127.0.0.1:11434/api/tags', timeout=5)
         if response.status_code == 200:
             models = response.json().get('models', [])
             AVAILABLE_OLLAMA_MODELS = [m['name'] for m in models]
-            print(f"✅ {len(AVAILABLE_OLLAMA_MODELS)} modèles détectés: {AVAILABLE_OLLAMA_MODELS}")
+            print(f"✅ {len(AVAILABLE_OLLAMA_MODELS)} models detected: {AVAILABLE_OLLAMA_MODELS}")
             return True
     except:
-        print("❌ Ollama n'est pas accessible")
+        print("❌ Ollama is not accessible")
     return False
 
 # Démarrage
-print(f"🚀 DÉMARRAGE SERVEUR YOMITOKU + OLLAMA")
+print(f"🚀 STARTING YOMITOKU + OLLAMA SERVER")
 detect_ollama_models()
 
-# TRADUCTIONS COMPLÈTES RESTAURÉES
+# TRADUCTIONS (Interface Utilisateur uniquement)
 TRANSLATIONS = {
     'fr': {
         'title': 'Yomitoku + Ollama', 'subtitle': 'Analyse & Traduction de documents',
@@ -342,7 +342,7 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
     
     # VÉRIFICATION VRAM AVANT TRADUCTION
     if not wait_for_vram(required_gb=4.0, timeout=20, job_id=job_id):
-         log_to_job(job_id, "⚠️ VRAM faible avant traduction, risque d'erreur...", 'warning')
+         log_to_job(job_id, "⚠️ Low VRAM before translation, risk of failure...", 'warning')
 
     FORMAT_NAMES = {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'}
     format_name = FORMAT_NAMES.get(output_format, output_format)
@@ -354,7 +354,7 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
     }
     target_lang_full = LANG_NAMES.get(target_lang, target_lang)
     
-    log_to_job(job_id, f"📄 Début traduction vers {target_lang_full}", 'info')
+    log_to_job(job_id, f"📄 Starting translation to {target_lang_full}", 'info')
     
     if len(text.strip()) < 50:
         return text
@@ -398,10 +398,10 @@ Return ONLY the translated document."""
         if response.status_code == 200:
             result = response.json()
             translated = result['message']['content'].strip()
-            log_to_job(job_id, f"✅ Traduction terminée ({len(translated)} car)", 'success')
+            log_to_job(job_id, f"✅ Translation completed ({len(translated)} chars)", 'success')
             return translated
         else:
-            log_to_job(job_id, f"❌ Erreur Ollama: {response.status_code}", 'error')
+            log_to_job(job_id, f"❌ Ollama Error: {response.status_code}", 'error')
             return f"❌ Translation failed: {response.status_code}"
             
     except Exception as e:
@@ -415,8 +415,8 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
     """Exécute Yomitoku et la traduction en arrière-plan"""
     process = None
     try:
-        log_to_job(job_id, f"📄 NOUVELLE ANALYSE - Job ID: {job_id}", 'info')
-        log_to_job(job_id, "⏳ Démarrage d'Yomitoku...", 'info')
+        log_to_job(job_id, f"📄 NEW ANALYSIS - Job ID: {job_id}", 'info')
+        log_to_job(job_id, "⏳ Starting Yomitoku...", 'info')
         
         # Variable d'environnement pour fragmentation
         my_env = os.environ.copy()
@@ -446,22 +446,22 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
         process.stdout.close()
         
         if returncode != 0:
-            log_to_job(job_id, f"❌ Erreur Yomitoku (code {returncode})", 'error')
+            log_to_job(job_id, f"❌ Yomitoku Error (code {returncode})", 'error')
             with data_lock: job_data[job_id]['status'] = 'error'
             return
         
-        log_to_job(job_id, "✅ Analyse Yomitoku terminée", 'success')
+        log_to_job(job_id, "✅ Yomitoku analysis completed", 'success')
         
         # TRADUCTION
         if translate_enabled:
-            log_to_job(job_id, f"\n🌐 TRADUCTION vers {target_lang}", 'info')
+            log_to_job(job_id, f"\n🌐 TRANSLATION to {target_lang}", 'info')
             results_dir = job_path / 'results'
             files_to_translate = []
             for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv']:
                 files_to_translate.extend(results_dir.glob(ext))
             
             for i, file_path in enumerate(files_to_translate[:2]):
-                log_to_job(job_id, f"\n📝 Traduction fichier {i+1}: {file_path.name}", 'info')
+                log_to_job(job_id, f"\n📝 Translating file {i+1}: {file_path.name}", 'info')
                 try:
                     text = file_path.read_text(encoding='utf-8', errors='replace')
                     translated = translate_with_ollama(text, target_lang, ollama_model, custom_prompt, job_id, output_format)
@@ -470,14 +470,14 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
                         translated_file = results_dir / f"translated_{target_lang}_{file_path.name}"
                         translated_file.write_text(translated, encoding='utf-8')
                 except Exception as e:
-                    log_to_job(job_id, f"❌ Erreur fichier: {e}", 'error')
+                    log_to_job(job_id, f"❌ File error: {e}", 'error')
         
         with data_lock:
             job_data[job_id]['status'] = 'complete'
             job_data[job_id]['progress'] = 100
             
     except Exception as e:
-        log_to_job(job_id, f"❌ Exception générale: {str(e)}", 'error')
+        log_to_job(job_id, f"❌ General Exception: {str(e)}", 'error')
         with data_lock: job_data[job_id]['status'] = 'error'
     finally:
         if process and process.poll() is None:
@@ -625,6 +625,6 @@ def get_job_info(job_id):
     return jsonify({'job_id': job_id, 'files': files, 'visualizations': vis, 'translated_files': trans, 'created': jp.stat().st_ctime})
 
 if __name__ == '__main__':
-    print("🚀 DÉMARRAGE DU SERVEUR (V3 - FIX COMPLET)")
-    if AVAILABLE_OLLAMA_MODELS: print(f"📦 Modèles: {AVAILABLE_OLLAMA_MODELS}")
+    print("🚀 SERVER STARTING (V3 - FULL FIX)")
+    if AVAILABLE_OLLAMA_MODELS: print(f"📦 Models: {AVAILABLE_OLLAMA_MODELS}")
     app.run(debug=False, host='0.0.0.0', port=5000)

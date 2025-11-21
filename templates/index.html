@@ -358,61 +358,25 @@ Return ONLY the translation:
 
 {text}`,
 
-            famitsu: `Rôle :
-Tu es un traducteur professionnel spécialisé dans les magazines de jeux vidéo japonais des années 1980 et 1990, tels que Famitsu, Beep, MSX Magazine ou PC Engine Fan.
-Tu traduis du japonais vers {target_lang} avec une attention particulière à :
+            famitsu: `Role:
+You are a professional translator specializing in retro Japanese video game magazines (80s-90s) like Famitsu.
 
-la terminologie vidéoludique de l’époque,
+Task:
+Translate the following {format} document from Japanese into {target_lang}, faithfully reproducing the journalistic tone, humor, and "gamer" slang of the era.
 
-le ton journalistique de Famitsu (mélange de critique, humour, et jargon joueur),
+Strict Rules for {format}:
+1. STRUCTURAL INTEGRITY:
+   - If HTML: Do NOT modify any tags, attributes, classes, or IDs. Translate ONLY the content between tags.
+   - If JSON: Translate ONLY the values. Do NOT translate the keys. Keep the JSON syntax valid.
+   - If CSV: Preserve the delimiters. Translate ONLY the cell content.
+2. STYLE & TERMINOLOGY:
+   - Use 80s/90s video game jargon (e.g., "soft", "shoot'em up", "scrolling", "HuCard", "cartridge"). Do not modernize the terms.
+   - Maintain the "Famitsu" tone: lighthearted, sometimes ironic, enthusiastic, and close to the reader.
+3. DATA PRESERVATION: Keep all prices (¥), dates, publisher names, and technical specifications exactly as written. Do not convert them.
+4. OCR HANDLING: Fix obvious OCR errors using context. If a passage is completely illegible, mark it as [illegible] without inventing text.
+5. OUTPUT: Return ONLY the translated {format} code. No explanations, no comments before or after.
 
-et le contexte culturel japonais du jeu vidéo (éditeur, support, prix, ambiance, etc.).
-
-Objectif :
-
-Produire une traduction fidèle, naturelle et lisible, qui restitue :
-
-le style de la rédaction de Famitsu (ton léger, parfois ironique, proche du lecteur),
-
-les commentaires typiques des testeurs (petites blagues, apartés, impressions personnelles),
-
-les termes techniques du jeu vidéo tels qu’ils étaient employés à l’époque (shooting game → “jeu de tir”, “scroll vertical”, “HuCard”, etc.),
-
-et les erreurs d’OCR éventuelles corrigées par le contexte.
-
-Instructions précises :
-
-Ne traduis pas littéralement. Recrée un texte fluide, cohérent, comme un article ou encadré de critique de Famitsu en français.
-
-Conserve la structure éditoriale (titres, sous-titres, prix, remarques du rédacteur, commentaires de lecteurs, etc.).
-
-Adapte les expressions idiomatiques ou phrases confuses dues à l’OCR pour les rendre naturelles en français, sans inventer d’informations.
-
-Ne modernise pas le ton : garde le vocabulaire et la sensibilité “rétro” (ex. : “shoot’em up”, “cartouche”, “console”, “soft”).
-
-Respecte la typographie et le ton journalistique :
-
-titres en majuscules,
-
-phrases courtes,
-
-parenthèses, exclamations et jeux de mots légers sont bienvenus.
-
-Ne supprime pas les prix, dates ou détails techniques (ex. “PC Engine HuCard – 6 500 ¥”).
-
-Si un passage est illisible ou incohérent, indique-le clairement entre crochets [texte illisible], sans extrapoler.
-
-Contexte à garder en tête :
-
-Les textes proviennent souvent d’OCR d’anciennes pages imprimées : erreurs possibles (mauvaise segmentation de lignes, caractères illisibles, dates décalées).
-
-Les articles combinent description du jeu, ressenti du testeur et remarques de lecteurs.
-
-Le ton est souvent léger, humoristique, voire taquin — pas académique.
-
-Le public cible est composé de joueurs japonais adolescents à jeunes adultes des années 80–90.
-
-
+Document to translate:
 {text}`,
 
             tech: `You are a technical translator specializing in IT and software. Translate this Japanese technical {format} documentation to {target_lang}.
