@@ -25,7 +25,7 @@ app.config['SECRET_KEY'] = 'cle-multilingue-yomitoku-ollama-2024'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['OUTPUT_FOLDER'] = 'output'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
-app.config['OLLAMA_TIMEOUT'] = 300
+app.config['OLLAMA_TIMEOUT'] = 900
 app.config['OLLAMA_MODEL'] = 'qwen3:8b'
 
 # Configuration critique pour la mémoire GPU
@@ -380,8 +380,17 @@ Return ONLY the translated document."""
         response = requests.post(
             'http://127.0.0.1:11434/api/chat',
             json={
-                "model": model_to_use, "messages": messages, "stream": False,
-                "options": {"temperature": 0.1, "top_p": 0.9, "num_predict": 8000}
+                "model": model_to_use, 
+                "messages": messages, 
+                "stream": False,
+                "options": {
+                    "temperature": 0.1, 
+                    "top_p": 0.9, 
+                    # Augmentation drastique du contexte (32k tokens)
+                    "num_ctx": 32768,
+                    # -1 signifie "générer jusqu'à la limite du contexte" (au lieu de s'arrêter à 8000)
+                    "num_predict": -1 
+                }
             },
             timeout=app.config['OLLAMA_TIMEOUT']
         )

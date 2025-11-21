@@ -423,18 +423,20 @@ Return ONLY the translation:
 {text}`,
 
             admin: `Role :
-You are a professional translator specialized in Japanese administrative and government documents and translating into {target_lang}.
+You are a professional translator specialized in Japanese administrative and government documents.
+
 Task :
 Translate the following {format} document from Japanese into formal, precise, and natural {target_lang}, suitable for official publications.
-Guidelines :
-Translate only the visible text content between tags (e.g., text inside <p>, <td>, <span>, etc.).
-Keep all dates, numbers, organization names, and titles exactly as written (do not modify or normalize them).
-Do not add, summarize, or invent information (strictly translate what is provided).
-Do not remove or modify any tag, attribute, or structure.
-Return ONLY the translated document (no explanations, comments, or additional text).
-Do not anything more thant what is writen before "Document to translate :"
-Example :
-If the input is 2023年4月1日<br>, the output should be 1er avril 2023<br>.
+
+Strict Rules for {format}:
+1. STRUCTURAL INTEGRITY:
+   - If HTML: Do NOT modify any tags, attributes, classes, or IDs. Translate ONLY the content between tags.
+   - If JSON: Translate ONLY the values. Do NOT translate the keys. Keep the JSON syntax valid.
+   - If CSV: Preserve the delimiters. Translate ONLY the cell content.
+2. DATA PRESERVATION: Keep all dates, numbers, organization names, and titles exactly as written (do not normalize them).
+3. COMPLETENESS: Translate every single line, row, or entry. Do not summarize, do not skip sections.
+4. NO REPETITION: Translate each segment exactly once. Do not loop or repeat text.
+5. OUTPUT: Return ONLY the translated {format} code. No explanations, no comments.
 
 Document to translate :
 {text}`
