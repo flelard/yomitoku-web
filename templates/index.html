@@ -269,12 +269,12 @@
                                                         <i class="fas fa-file-contract"></i> Administratif
                                                     </button>
                                                 </div>
-                                                <textarea class="form-control font-monospace" id="custom_prompt" name="custom_prompt" rows="6">You are a professional translator. Translate this Japanese text to {target_lang}.
+                                                <textarea class="form-control font-monospace" id="custom_prompt" name="custom_prompt" rows="6">You are a professional translator. Translate this Japanese {format} to {target_lang}.
 Return ONLY the translation, nothing else:
 
 {text}</textarea>
                                                 <small class="text-muted">
-                                                    <i class="fas fa-lightbulb"></i> Variables : <code>{text}</code>, <code>{target_lang}</code>
+                                                    <i class="fas fa-lightbulb"></i> Variables : <code>{text}</code>, <code>{target_lang}</code>, <code>{format}</code>
                                                     <br><i class="fas fa-info-circle"></i> Modifiez le prompt ci-dessous selon vos besoins
                                                 </small>
                                             </div>
@@ -339,19 +339,19 @@ Return ONLY the translation, nothing else:
     <script>
         // ===== PROMPTS PRÉDÉFINIS =====
         const PROMPTS = {
-            default: `You are a professional translator. Translate this Japanese text to {target_lang}.
+            default: `You are a professional translator. Translate this Japanese {format} to {target_lang}.
 Return ONLY the translation, nothing else:
 
 {text}`,
 
-            manga: `You are a professional manga translator. Translate this Japanese text to {target_lang}.
+            manga: `You are a professional manga translator. Translate this Japanese {format} to {target_lang}.
 Maintain the tone, style, and cultural nuances appropriate for manga.
 Do not translate sound effects (SFX) literally - adapt them naturally.
 Return ONLY the translation:
 
 {text}`,
 
-            game: `You are a professional video game translator. Translate this Japanese text to {target_lang}.
+            game: `You are a professional video game translator. Translate this Japanese {format} to {target_lang}.
 Use gaming terminology and maintain an immersive, engaging style appropriate for games.
 Preserve character names and special terms.
 Return ONLY the translation:
@@ -415,27 +415,26 @@ Le public cible est composé de joueurs japonais adolescents à jeunes adultes d
 
 {text}`,
 
-            tech: `You are a technical translator specializing in IT and software. Translate this Japanese technical documentation to {target_lang}.
+            tech: `You are a technical translator specializing in IT and software. Translate this Japanese technical {format} documentation to {target_lang}.
 Use precise technical terminology and maintain accuracy.
 Preserve code snippets, commands, and technical terms.
 Return ONLY the translation:
 
 {text}`,
 
-            admin: `
-Role :
+            admin: `Role :
 You are a professional translator specialized in Japanese administrative and government documents and translating into {target_lang}.
 Task :
-Translate the following HTML document from Japanese into formal, precise, and natural French, suitable for official publications.
+Translate the following {format} document from Japanese into formal, precise, and natural {target_lang}, suitable for official publications.
 Guidelines :
-Preserve the HTML structure (tags such as <h1>, <p>, <table>, <tr>, <td>, <br>, etc.) without modification.
 Translate only the visible text content between tags (e.g., text inside <p>, <td>, <span>, etc.).
 Keep all dates, numbers, organization names, and titles exactly as written (do not modify or normalize them).
 Do not add, summarize, or invent information (strictly translate what is provided).
-Do not remove or modify any HTML tag, attribute, or structure.
-Return ONLY the translated HTML (no explanations, comments, or additional text).
+Do not remove or modify any tag, attribute, or structure.
+Return ONLY the translated document (no explanations, comments, or additional text).
+Do not anything more thant what is writen before "Document to translate :"
 Example :
-If the input is <p>2023年4月1日</p>, the output should be <p>1er avril 2023</p>.
+If the input is 2023年4月1日<br>, the output should be 1er avril 2023<br>.
 
 Document to translate :
 {text}`
@@ -584,6 +583,9 @@ Document to translate :
                         eventSource.close();
                         analyzeBtnContainer.classList.remove('btn-hidden');
                         processingStatus.style.display = 'none';
+                        // RÉACTIVER LE BOUTON EN CAS D'ERREUR
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
                         return;
                     }
                     
@@ -630,6 +632,9 @@ Document to translate :
                         processingStatus.style.display = 'none';
                         analyzeBtnContainer.classList.remove('btn-hidden');
                         eventSource.close();
+                        // RÉACTIVER LE BOUTON UNE FOIS TOUT FAIT
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
                     }
                 };
                 
@@ -638,6 +643,9 @@ Document to translate :
                     eventSource.close();
                     analyzeBtnContainer.classList.remove('btn-hidden');
                     processingStatus.style.display = 'none';
+                    // RÉACTIVER LE BOUTON EN CAS DE DÉCONNEXION
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
                 };
             }
 
@@ -682,8 +690,7 @@ Document to translate :
                     analyzeBtnContainer.classList.remove('btn-hidden');
                     processingStatus.style.display = 'none';
                 } finally {
-                    analyzeBtn.disabled = false;
-                    analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
+
                 }
             });
 
