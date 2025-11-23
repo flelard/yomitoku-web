@@ -18,8 +18,7 @@
         
         /* Zone de prévisualisation */
         #filePreview { display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 10px; border: 1px solid #dee2e6; }
-        #filePreview img { max-width: 200px; max-height: 200px; border-radius: 8px; margin-right: 15px; }
-        .file-details { display: inline-block; vertical-align: top; }
+        .file-list { max-height: 300px; overflow-y: auto; }
         
         /* Zone de progression */
         #progressContainer { display: none; margin-top: 20px; }
@@ -89,11 +88,11 @@
                             <div class="mb-3">
                                 <label for="fileInput" class="form-label"><strong>{{ translations.select_file }}</strong> (PDF, PNG, JPG, TIFF)</label>
                                 <div class="upload-area" id="uploadArea">
-                                    <input type="file" class="form-control d-none" id="fileInput" name="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp" required>
+                                    <input type="file" class="form-control d-none" id="fileInput" name="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp" multiple required>
                                     <div class="text-center">
                                         <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
                                         <p class="mb-2">{{ translations.drag_drop }}</p>
-                                        <small class="text-muted">Max: 100MB</small>
+                                        <small class="text-muted">Multi-files allowed (Max: 200MB total)</small>
                                     </div>
                                 </div>
                                 <div id="filePreview"></div>
@@ -478,43 +477,86 @@ Document to translate :
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     fileInput.files = files;
-                    updateFileInfo(files[0]);
+                    updateFileInfo(files);
                 }
             });
 
             fileInput.addEventListener('change', (e) => {
                 if (e.target.files.length > 0) {
-                    updateFileInfo(e.target.files[0]);
+                    updateFileInfo(e.target.files);
                 }
             });
 
-            function updateFileInfo(file) {
-                const fileSize = (file.size / 1024 / 1024).toFixed(2);
-                const fileType = file.type || 'Unknown';
+            // FONCTION CORRIGÉE POUR AFFICHER LES MINIATURES MULTIPLES
+            function updateFileInfo(files) {
+                if (files.length === 0) return;
                 
-                let html = `
-                    <div class="d-flex align-items-center">
-                        <div class="file-details">
-                            <strong><i class="fas fa-file"></i> ${file.name}</strong><br>
-                            <small class="text-muted">
-                                <i class="fas fa-database"></i> ${fileSize} MB | 
-                                <i class="fas fa-tag"></i> ${fileType}
-                            </small>
+                let totalSize = 0;
+                
+                // On prépare le conteneur principal
+                const containerHtml = `
+                    <div class="mt-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-layer-group"></i> ${files.length} fichier(s)</strong>
+                            <span class="badge bg-secondary" id="totalSizeBadge">Calculating...</span>
                         </div>
+                        <hr class="my-2">
+                        <div class="file-list list-group mb-2" id="fileListContainer"></div>
+                    </div>
                 `;
                 
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const previewHtml = `<img src="${e.target.result}" alt="Aperçu" class="img-thumbnail">`;
-                        filePreview.innerHTML = html + previewHtml + '</div>';
-                        filePreview.style.display = 'block';
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    filePreview.innerHTML = html + '</div>';
-                    filePreview.style.display = 'block';
-                }
+                filePreview.innerHTML = containerHtml;
+                filePreview.style.display = 'block';
+                
+                const listContainer = document.getElementById('fileListContainer');
+                
+                Array.from(files).forEach(file => {
+                    totalSize += file.size;
+                    
+                    // Création de l'élément de liste (DOM) pour gérer l'async proprement
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item d-flex align-items-center p-2';
+                    
+                    // Zone vignette (gauche)
+                    const thumbCol = document.createElement('div');
+                    thumbCol.className = 'me-3 text-center d-flex align-items-center justify-content-center';
+                    thumbCol.style.width = '60px';
+                    thumbCol.style.height = '60px';
+                    thumbCol.style.backgroundColor = '#f8f9fa';
+                    thumbCol.style.borderRadius = '5px';
+                    thumbCol.style.overflow = 'hidden'; // Important pour que l'image ne dépasse pas
+                    
+                    // Icône par défaut (en attendant le chargement ou si pas image)
+                    thumbCol.innerHTML = '<i class="fas fa-file-pdf fa-2x text-danger"></i>'; 
+                    
+                    if (file.type.startsWith('image/')) {
+                         thumbCol.innerHTML = '<i class="fas fa-spinner fa-spin text-muted"></i>'; // Spinner pendant chargement
+                    }
+
+                    // Zone infos (droite)
+                    const infoCol = document.createElement('div');
+                    infoCol.className = 'flex-grow-1 overflow-hidden';
+                    infoCol.innerHTML = `
+                        <div class="text-truncate fw-bold">${file.name}</div>
+                        <small class="text-muted">${(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                    `;
+                    
+                    item.appendChild(thumbCol);
+                    item.appendChild(infoCol);
+                    listContainer.appendChild(item);
+                    
+                    // Chargement asynchrone de l'image (si c'est une image)
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            thumbCol.innerHTML = `<img src="${e.target.result}" alt="${file.name}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+                
+                // Mise à jour de la taille totale une fois la boucle finie
+                document.getElementById('totalSizeBadge').textContent = (totalSize / 1024 / 1024).toFixed(2) + ' MB Total';
             }
 
             function showToast(message, type = 'success') {
@@ -620,8 +662,8 @@ Document to translate :
                 
                 const formData = new FormData(uploadForm);
                 
-                if (!fileInput.files[0]) {
-                    alert('Veuillez sélectionner un fichier');
+                if (!fileInput.files.length) {
+                    alert('Veuillez sélectionner au moins un fichier');
                     return;
                 }
 

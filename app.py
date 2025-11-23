@@ -24,7 +24,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cle-multilingue-yomitoku-ollama-2024'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['OUTPUT_FOLDER'] = 'output'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # Augmenté à 200MB pour le multi-fichiers
 app.config['OLLAMA_TIMEOUT'] = 900
 app.config['OLLAMA_MODEL'] = 'qwen3:8b'
 
@@ -53,7 +53,7 @@ def shutdown_executor():
 atexit.register(shutdown_executor)
 
 # =======================================================================
-# GESTION AVANCÉE DE LA MÉMOIRE (NOUVEAU CODE DE RÉPARATION)
+# GESTION AVANCÉE DE LA MÉMOIRE
 # =======================================================================
 
 def get_gpu_memory_info():
@@ -139,7 +139,6 @@ def wait_for_vram(required_gb=3.0, timeout=30, job_id=None):
     return False
 
 def cleanup_gpu_memory(job_id=None, aggressive=False):
-    """Fonction de compatibilité pour le reste du code"""
     force_unload_ollama(job_id)
     gc.collect()
     if HAS_TORCH and torch.cuda.is_available():
@@ -148,16 +147,15 @@ def cleanup_gpu_memory(job_id=None, aggressive=False):
 
 # =======================================================================
 
-def run_yomitoku_job_with_lock(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format, gpu_lock):
+def run_yomitoku_job_with_lock(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format, gpu_lock):
     """Wrapper pour exécuter le job avec verrou GPU et surveillance VRAM"""
     if gpu_lock:
         acquired = False
         try:
             acquired = gpu_lock.acquire(timeout=600)
             if acquired:
-                log_to_job(job_id, "🔒 GPU Lock acquired (1 job at a time)", 'info')
+                log_to_job(job_id, "🔒 GPU Lock acquired (batch processing)", 'info')
                 
-                # VÉRIFICATION VRAM AVANT LANCEMENT
                 vram_ok = wait_for_vram(required_gb=3.0, timeout=45, job_id=job_id)
                 
                 if not vram_ok:
@@ -167,7 +165,7 @@ def run_yomitoku_job_with_lock(job_id, input_path, cmd, translate_enabled, targe
                         job_data[job_id]['status'] = 'error'
                     return
 
-                run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
+                run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
             else:
                 log_to_job(job_id, "❌ Timeout: Unable to acquire GPU lock", 'error')
                 with data_lock:
@@ -179,7 +177,7 @@ def run_yomitoku_job_with_lock(job_id, input_path, cmd, translate_enabled, targe
                 gpu_lock.release()
                 log_to_job(job_id, "🔓 GPU lock released", 'info')
     else:
-        run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
+        run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
 
 def log_to_job(job_id, message, level='info', progress=None):
     with data_lock:
@@ -200,17 +198,6 @@ def log_to_job(job_id, message, level='info', progress=None):
         
         if progress is not None:
             job_data[job_id]['progress'] = progress
-        
-        if 'Processing page' in message:
-            parts = message.split()
-            try:
-                current = int(parts[2].split('/')[0])
-                total = int(parts[2].split('/')[1])
-                job_data[job_id]['progress'] = (current / total) * 100
-                job_data[job_id]['current_page'] = current
-                job_data[job_id]['total_pages'] = total
-            except:
-                pass
     
     print(f"[{job_id}] {message}")
 
@@ -237,7 +224,7 @@ detect_ollama_models()
 TRANSLATIONS = {
     'fr': {
         'title': 'Yomitoku + Ollama', 'subtitle': 'Analyse & Traduction de documents',
-        'select_file': 'Sélectionnez un document', 'format_label': 'Format de sortie',
+        'select_file': 'Sélectionnez vos documents', 'format_label': 'Format de sortie',
         'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'},
         'device': 'Périphérique', 'options': 'Options avancées', 'trans_options': 'Options de traduction',
         'vis': 'Générer la visualisation', 'lite': 'Mode léger (rapide)',
@@ -247,7 +234,7 @@ TRANSLATIONS = {
         'target_lang': 'Langue cible', 'target_langs': {'fr': 'Français', 'en': 'Anglais', 'es': 'Espagnol', 'de': 'Allemand'},
         'ollama_model': 'Modèle Ollama', 'custom_prompt': 'Prompt personnalisé (optionnel)',
         'custom_prompt_help': 'Laissez vide pour utiliser le prompt par défaut.',
-        'launch': 'Lancer l\'analyse', 'drag_drop': 'Glissez-déposez votre fichier ici ou cliquez pour sélectionner',
+        'launch': 'Lancer l\'analyse', 'drag_drop': 'Glissez-déposez vos fichiers ici ou cliquez',
         'success': 'Analyse terminée !', 'translating': 'Traduction en cours...',
         'error': 'Erreur', 'error_ollama': 'Erreur Ollama', 'download': 'Télécharger',
         'view_results': 'Voir les résultats', 'job_id': 'Job ID', 'files_generated': 'Fichiers générés',
@@ -267,7 +254,7 @@ TRANSLATIONS = {
     },
     'en': {
         'title': 'Yomitoku + Ollama', 'subtitle': 'Document Analysis & Translation',
-        'select_file': 'Select a document', 'format_label': 'Output Format',
+        'select_file': 'Select documents', 'format_label': 'Output Format',
         'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'},
         'device': 'Device', 'options': 'Advanced Options', 'trans_options': 'Translation Options',
         'vis': 'Generate visualization', 'lite': 'Lite mode (fast)',
@@ -277,7 +264,7 @@ TRANSLATIONS = {
         'target_lang': 'Target language', 'target_langs': {'fr': 'French', 'en': 'English', 'es': 'Spanish', 'de': 'German'},
         'ollama_model': 'Ollama Model', 'custom_prompt': 'Custom prompt (optional)',
         'custom_prompt_help': 'Leave empty for default prompt.',
-        'launch': 'Launch Analysis', 'drag_drop': 'Drag & drop your file here or click to select',
+        'launch': 'Launch Analysis', 'drag_drop': 'Drag & drop your files here or click',
         'success': 'Analysis completed!', 'translating': 'Translation in progress...',
         'error': 'Error', 'error_ollama': 'Ollama error', 'download': 'Download',
         'view_results': 'View Results', 'job_id': 'Job ID', 'files_generated': 'Generated Files',
@@ -307,7 +294,7 @@ TRANSLATIONS = {
         'target_lang': 'ターゲット言語', 'target_langs': {'fr': 'フランス語', 'en': '英語', 'es': 'スペイン語', 'de': 'ドイツ語'},
         'ollama_model': 'Ollamaモデル', 'custom_prompt': 'カスタムプロンプト(オプション)',
         'custom_prompt_help': 'デフォルトプロンプトを使用する場合は空白のままにします。',
-        'launch': '分析を開始', 'drag_drop': 'ここにファイルをドラッグ&ドロップ、またはクリックして選択',
+        'launch': '分析を開始', 'drag_drop': 'ここにファイルをドラッグ&ドロップ',
         'success': '分析が完了しました!', 'translating': '翻訳中...',
         'error': 'エラー', 'error_ollama': 'Ollamaエラー', 'download': 'ダウンロード',
         'view_results': '結果を表示', 'job_id': 'ジョブID', 'files_generated': '生成されたファイル',
@@ -340,7 +327,6 @@ def get_lang():
 def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None, job_id=None, output_format='md'):
     """Traduit avec Ollama en surveillant la VRAM"""
     
-    # VÉRIFICATION VRAM AVANT TRADUCTION
     if not wait_for_vram(required_gb=4.0, timeout=20, job_id=job_id):
          log_to_job(job_id, "⚠️ Low VRAM before translation, risk of failure...", 'warning')
 
@@ -353,8 +339,6 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
         'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean'
     }
     target_lang_full = LANG_NAMES.get(target_lang, target_lang)
-    
-    log_to_job(job_id, f"📄 Starting translation to {target_lang_full}", 'info')
     
     if len(text.strip()) < 50:
         return text
@@ -386,9 +370,7 @@ Return ONLY the translated document."""
                 "options": {
                     "temperature": 0.1, 
                     "top_p": 0.9, 
-                    # Augmentation drastique du contexte (32k tokens)
                     "num_ctx": 32768,
-                    # -1 signifie "générer jusqu'à la limite du contexte" (au lieu de s'arrêter à 8000)
                     "num_predict": -1 
                 }
             },
@@ -398,7 +380,6 @@ Return ONLY the translated document."""
         if response.status_code == 200:
             result = response.json()
             translated = result['message']['content'].strip()
-            log_to_job(job_id, f"✅ Translation completed ({len(translated)} chars)", 'success')
             return translated
         else:
             log_to_job(job_id, f"❌ Ollama Error: {response.status_code}", 'error')
@@ -408,49 +389,62 @@ Return ONLY the translated document."""
         log_to_job(job_id, f"❌ Exception: {str(e)}", 'error')
         return f"❌ Translation error: {str(e)}"
     finally:
-        # Nettoyage après chaque traduction
         force_unload_ollama(job_id)
 
-def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format):
-    """Exécute Yomitoku et la traduction en arrière-plan"""
+def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format):
+    """Exécute Yomitoku SÉQUENTIELLEMENT pour chaque fichier"""
     process = None
     try:
-        log_to_job(job_id, f"📄 NEW ANALYSIS - Job ID: {job_id}", 'info')
-        log_to_job(job_id, "⏳ Starting Yomitoku...", 'info')
+        log_to_job(job_id, f"📄 NEW BATCH ANALYSIS - Job ID: {job_id}", 'info')
+        total_files = len(input_filenames)
         
-        # Variable d'environnement pour fragmentation
+        # Variable d'environnement
         my_env = os.environ.copy()
         my_env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         
-        process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            universal_newlines=True, bufsize=1, env=my_env
-        )
+        for file_idx, filename in enumerate(input_filenames):
+            input_path = job_path / filename
+            log_to_job(job_id, f"⏳ Processing file {file_idx + 1}/{total_files}: {filename}", 'info')
+            
+            # Construction de la commande pour CE fichier
+            # On prend la commande de base (qui contient déjà les flags -o, -d, etc) et on insert le fichier input
+            # La commande de base est ['yomitoku', '-f', 'md', ...] 
+            # Il faut insérer le chemin du fichier après 'yomitoku'
+            current_cmd = list(base_cmd)
+            current_cmd.insert(1, str(input_path))
+            
+            process = subprocess.Popen(
+                current_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                universal_newlines=True, bufsize=1, env=my_env
+            )
+            
+            # Lecture des logs
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    line = line.strip()
+                    if 'Processing page' in line:
+                        parts = line.split()
+                        try:
+                            current = int(parts[2].split('/')[0])
+                            total = int(parts[2].split('/')[1])
+                            # Calcul progression globale
+                            file_progress = (current / total)
+                            global_progress = ((file_idx + file_progress) / total_files) * 100
+                            
+                            log_to_job(job_id, f"[{filename}] {line}", 'info', global_progress)
+                        except:
+                            log_to_job(job_id, line, 'info')
+                    else:
+                        log_to_job(job_id, f"[{filename}] {line}", 'info')
+            
+            returncode = process.wait()
+            process.stdout.close()
+            
+            if returncode != 0:
+                log_to_job(job_id, f"❌ Error on file {filename} (code {returncode})", 'error')
+                # On continue quand même les autres fichiers
         
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                line = line.strip()
-                if 'Processing page' in line:
-                    parts = line.split()
-                    try:
-                        current = int(parts[2].split('/')[0])
-                        total = int(parts[2].split('/')[1])
-                        progress = (current / total) * 100
-                        log_to_job(job_id, line, 'info', progress)
-                    except:
-                        log_to_job(job_id, line, 'info')
-                else:
-                    log_to_job(job_id, line, 'info')
-        
-        returncode = process.wait()
-        process.stdout.close()
-        
-        if returncode != 0:
-            log_to_job(job_id, f"❌ Yomitoku Error (code {returncode})", 'error')
-            with data_lock: job_data[job_id]['status'] = 'error'
-            return
-        
-        log_to_job(job_id, "✅ Yomitoku analysis completed", 'success')
+        log_to_job(job_id, "✅ All files processed", 'success')
         
         # TRADUCTION
         if translate_enabled:
@@ -460,8 +454,9 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
             for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv']:
                 files_to_translate.extend(results_dir.glob(ext))
             
-            for i, file_path in enumerate(files_to_translate[:2]):
-                log_to_job(job_id, f"\n📝 Translating file {i+1}: {file_path.name}", 'info')
+            # Traduction de TOUS les fichiers générés
+            for i, file_path in enumerate(files_to_translate):
+                log_to_job(job_id, f"📝 Translating ({i+1}/{len(files_to_translate)}): {file_path.name}", 'info')
                 try:
                     text = file_path.read_text(encoding='utf-8', errors='replace')
                     translated = translate_with_ollama(text, target_lang, ollama_model, custom_prompt, job_id, output_format)
@@ -469,6 +464,7 @@ def run_yomitoku_job(job_id, input_path, cmd, translate_enabled, target_lang, ol
                     if translated and not translated.startswith('❌'):
                         translated_file = results_dir / f"translated_{target_lang}_{file_path.name}"
                         translated_file.write_text(translated, encoding='utf-8')
+                        log_to_job(job_id, f"✅ Translated: {translated_file.name}", 'success')
                 except Exception as e:
                     log_to_job(job_id, f"❌ File error: {e}", 'error')
         
@@ -542,18 +538,25 @@ def stream_logs(job_id):
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    # Modification pour accepter une liste de fichiers
     if 'file' not in request.files: return jsonify({'error': 'No file provided'}), 400
-    file = request.files['file']
-    if file.filename == '': return jsonify({'error': 'No file selected'}), 400
-    if not allowed_file(file.filename): return jsonify({'error': 'File format not allowed'}), 400
+    
+    files = request.files.getlist('file')
+    if not files or files[0].filename == '': return jsonify({'error': 'No file selected'}), 400
     
     job_id = str(uuid.uuid4())[:8]
     job_path = get_job_path(job_id)
     job_path.mkdir(exist_ok=True)
     
-    filename = secure_filename(file.filename)
-    input_path = job_path / filename
-    file.save(input_path)
+    valid_filenames = []
+    for file in files:
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file.save(job_path / filename)
+            valid_filenames.append(filename)
+    
+    if not valid_filenames:
+        return jsonify({'error': 'No valid files'}), 400
     
     output_format = request.form.get('format', 'md')
     device = request.form.get('device', 'cpu')
@@ -562,17 +565,18 @@ def upload_file():
     ollama_model = request.form.get('ollama_model', app.config['OLLAMA_MODEL'])
     custom_prompt = request.form.get('custom_prompt', '').strip()
     
-    cmd = ['yomitoku', str(input_path), '-f', output_format, '-o', str(job_path / 'results'), '-d', device]
-    if 'vis' in request.form: cmd.append('-v')
-    if 'lite' in request.form: cmd.append('-l')
-    if 'figure' in request.form: cmd.append('--figure')
-    if 'figure_letter' in request.form: cmd.append('--figure_letter')
-    if 'ignore_line_break' in request.form: cmd.append('--ignore_line_break')
-    if 'combine' in request.form: cmd.append('--combine')
-    if 'ignore_meta' in request.form: cmd.append('--ignore_meta')
+    # On construit la commande de base SANS le fichier input (il sera ajouté dans la boucle)
+    base_cmd = ['yomitoku', '-f', output_format, '-o', str(job_path / 'results'), '-d', device]
+    if 'vis' in request.form: base_cmd.append('-v')
+    if 'lite' in request.form: base_cmd.append('-l')
+    if 'figure' in request.form: base_cmd.append('--figure')
+    if 'figure_letter' in request.form: base_cmd.append('--figure_letter')
+    if 'ignore_line_break' in request.form: base_cmd.append('--ignore_line_break')
+    if 'combine' in request.form: base_cmd.append('--combine')
+    if 'ignore_meta' in request.form: base_cmd.append('--ignore_meta')
     
     gpu_lock = gpu_semaphore if device == 'cuda' else None
-    executor.submit(run_yomitoku_job_with_lock, job_id, input_path, cmd, translate_enabled, 
+    executor.submit(run_yomitoku_job_with_lock, job_id, valid_filenames, base_cmd, translate_enabled, 
                    target_lang, ollama_model, custom_prompt, job_path, output_format, gpu_lock)
     
     return jsonify({'job_id': job_id, 'success': True, 'files': []})
@@ -625,6 +629,6 @@ def get_job_info(job_id):
     return jsonify({'job_id': job_id, 'files': files, 'visualizations': vis, 'translated_files': trans, 'created': jp.stat().st_ctime})
 
 if __name__ == '__main__':
-    print("🚀 SERVER STARTING (V3 - FULL FIX)")
+    print("🚀 SERVER STARTING (V3.1 - BATCH SUPPORT)")
     if AVAILABLE_OLLAMA_MODELS: print(f"📦 Models: {AVAILABLE_OLLAMA_MODELS}")
     app.run(debug=False, host='0.0.0.0', port=5000)
