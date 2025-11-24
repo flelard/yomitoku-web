@@ -24,9 +24,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cle-multilingue-yomitoku-ollama-2024'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['OUTPUT_FOLDER'] = 'output'
-app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # Augmenté à 200MB pour le multi-fichiers
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 app.config['OLLAMA_TIMEOUT'] = 900
-app.config['OLLAMA_MODEL'] = 'qwen3:8b'
+app.config['OLLAMA_MODEL'] = 'qwen2.5:latest'
 
 # Configuration critique pour la mémoire GPU
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -40,7 +40,7 @@ AVAILABLE_OLLAMA_MODELS = []
 job_data = {}
 data_lock = threading.Lock()
 
-# SEMAPHONE pour limiter les jobs GPU à 1 à la fois
+# SEMAPHORE pour limiter les jobs GPU à 1 à la fois
 gpu_semaphore = threading.Semaphore(1)
 
 # ===== INITIALISATION DE L'EXECUTEUR =====
@@ -147,7 +147,7 @@ def cleanup_gpu_memory(job_id=None, aggressive=False):
 
 # =======================================================================
 
-def run_yomitoku_job_with_lock(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format, gpu_lock):
+def run_yomitoku_job_with_lock(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, num_ctx, job_path, output_format, gpu_lock):
     """Wrapper pour exécuter le job avec verrou GPU et surveillance VRAM"""
     if gpu_lock:
         acquired = False
@@ -165,7 +165,7 @@ def run_yomitoku_job_with_lock(job_id, input_filenames, base_cmd, translate_enab
                         job_data[job_id]['status'] = 'error'
                     return
 
-                run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
+                run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, num_ctx, job_path, output_format)
             else:
                 log_to_job(job_id, "❌ Timeout: Unable to acquire GPU lock", 'error')
                 with data_lock:
@@ -177,7 +177,7 @@ def run_yomitoku_job_with_lock(job_id, input_filenames, base_cmd, translate_enab
                 gpu_lock.release()
                 log_to_job(job_id, "🔓 GPU lock released", 'info')
     else:
-        run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format)
+        run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, num_ctx, job_path, output_format)
 
 def log_to_job(job_id, message, level='info', progress=None):
     with data_lock:
@@ -234,6 +234,8 @@ TRANSLATIONS = {
         'target_lang': 'Langue cible', 'target_langs': {'fr': 'Français', 'en': 'Anglais', 'es': 'Espagnol', 'de': 'Allemand'},
         'ollama_model': 'Modèle Ollama', 'custom_prompt': 'Prompt personnalisé (optionnel)',
         'custom_prompt_help': 'Laissez vide pour utiliser le prompt par défaut.',
+        'ctx_label': 'Taille du contexte',
+        'ctx_help': 'Mémoire de travail de l\'IA (en tokens). Plus elle est élevée, plus le traitement est lent mais accepte de longs textes. 4096 est recommandé pour la vitesse.',
         'launch': 'Lancer l\'analyse', 'drag_drop': 'Glissez-déposez vos fichiers ici ou cliquez',
         'success': 'Analyse terminée !', 'translating': 'Traduction en cours...',
         'error': 'Erreur', 'error_ollama': 'Erreur Ollama', 'download': 'Télécharger',
@@ -264,6 +266,8 @@ TRANSLATIONS = {
         'target_lang': 'Target language', 'target_langs': {'fr': 'French', 'en': 'English', 'es': 'Spanish', 'de': 'German'},
         'ollama_model': 'Ollama Model', 'custom_prompt': 'Custom prompt (optional)',
         'custom_prompt_help': 'Leave empty for default prompt.',
+        'ctx_label': 'Context Size',
+        'ctx_help': 'AI working memory (in tokens). Higher values are slower but handle longer texts. 4096 is recommended for speed.',
         'launch': 'Launch Analysis', 'drag_drop': 'Drag & drop your files here or click',
         'success': 'Analysis completed!', 'translating': 'Translation in progress...',
         'error': 'Error', 'error_ollama': 'Ollama error', 'download': 'Download',
@@ -294,6 +298,8 @@ TRANSLATIONS = {
         'target_lang': 'ターゲット言語', 'target_langs': {'fr': 'フランス語', 'en': '英語', 'es': 'スペイン語', 'de': 'ドイツ語'},
         'ollama_model': 'Ollamaモデル', 'custom_prompt': 'カスタムプロンプト(オプション)',
         'custom_prompt_help': 'デフォルトプロンプトを使用する場合は空白のままにします。',
+        'ctx_label': 'コンテキストサイズ',
+        'ctx_help': 'AIの作業メモリ（トークン単位）。値が高いほど長文を扱えますが、処理は遅くなります。速度重視なら4096が推奨です。',
         'launch': '分析を開始', 'drag_drop': 'ここにファイルをドラッグ&ドロップ',
         'success': '分析が完了しました!', 'translating': '翻訳中...',
         'error': 'エラー', 'error_ollama': 'Ollamaエラー', 'download': 'ダウンロード',
@@ -324,7 +330,7 @@ def get_job_path(job_id):
 def get_lang():
     return session.get('lang', 'fr')
 
-def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None, job_id=None, output_format='md'):
+def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None, num_ctx=4096, job_id=None, output_format='md'):
     """Traduit avec Ollama en surveillant la VRAM"""
     
     if not wait_for_vram(required_gb=4.0, timeout=20, job_id=job_id):
@@ -370,7 +376,7 @@ Return ONLY the translated document."""
                 "options": {
                     "temperature": 0.1, 
                     "top_p": 0.9, 
-                    "num_ctx": 32768,
+                    "num_ctx": num_ctx, # Valeur configurable
                     "num_predict": -1 
                 }
             },
@@ -391,7 +397,7 @@ Return ONLY the translated document."""
     finally:
         force_unload_ollama(job_id)
 
-def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, job_path, output_format):
+def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, target_lang, ollama_model, custom_prompt, num_ctx, job_path, output_format):
     """Exécute Yomitoku SÉQUENTIELLEMENT pour chaque fichier"""
     process = None
     try:
@@ -407,9 +413,6 @@ def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, targe
             log_to_job(job_id, f"⏳ Processing file {file_idx + 1}/{total_files}: {filename}", 'info')
             
             # Construction de la commande pour CE fichier
-            # On prend la commande de base (qui contient déjà les flags -o, -d, etc) et on insert le fichier input
-            # La commande de base est ['yomitoku', '-f', 'md', ...] 
-            # Il faut insérer le chemin du fichier après 'yomitoku'
             current_cmd = list(base_cmd)
             current_cmd.insert(1, str(input_path))
             
@@ -427,7 +430,7 @@ def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, targe
                         try:
                             current = int(parts[2].split('/')[0])
                             total = int(parts[2].split('/')[1])
-                            # Calcul progression globale
+                            # Calcul progression globale (pourcentage de fichier + pourcentage de page)
                             file_progress = (current / total)
                             global_progress = ((file_idx + file_progress) / total_files) * 100
                             
@@ -448,7 +451,7 @@ def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, targe
         
         # TRADUCTION
         if translate_enabled:
-            log_to_job(job_id, f"\n🌐 TRANSLATION to {target_lang}", 'info')
+            log_to_job(job_id, f"\n🌐 TRANSLATION to {target_lang} (Ctx: {num_ctx})", 'info')
             results_dir = job_path / 'results'
             files_to_translate = []
             for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv']:
@@ -459,7 +462,7 @@ def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, targe
                 log_to_job(job_id, f"📝 Translating ({i+1}/{len(files_to_translate)}): {file_path.name}", 'info')
                 try:
                     text = file_path.read_text(encoding='utf-8', errors='replace')
-                    translated = translate_with_ollama(text, target_lang, ollama_model, custom_prompt, job_id, output_format)
+                    translated = translate_with_ollama(text, target_lang, ollama_model, custom_prompt, num_ctx, job_id, output_format)
                     
                     if translated and not translated.startswith('❌'):
                         translated_file = results_dir / f"translated_{target_lang}_{file_path.name}"
@@ -538,7 +541,6 @@ def stream_logs(job_id):
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # Modification pour accepter une liste de fichiers
     if 'file' not in request.files: return jsonify({'error': 'No file provided'}), 400
     
     files = request.files.getlist('file')
@@ -565,7 +567,12 @@ def upload_file():
     ollama_model = request.form.get('ollama_model', app.config['OLLAMA_MODEL'])
     custom_prompt = request.form.get('custom_prompt', '').strip()
     
-    # On construit la commande de base SANS le fichier input (il sera ajouté dans la boucle)
+    # Récupération de num_ctx avec fallback
+    try:
+        num_ctx = int(request.form.get('num_ctx', 4096))
+    except ValueError:
+        num_ctx = 4096
+
     base_cmd = ['yomitoku', '-f', output_format, '-o', str(job_path / 'results'), '-d', device]
     if 'vis' in request.form: base_cmd.append('-v')
     if 'lite' in request.form: base_cmd.append('-l')
@@ -577,7 +584,7 @@ def upload_file():
     
     gpu_lock = gpu_semaphore if device == 'cuda' else None
     executor.submit(run_yomitoku_job_with_lock, job_id, valid_filenames, base_cmd, translate_enabled, 
-                   target_lang, ollama_model, custom_prompt, job_path, output_format, gpu_lock)
+                   target_lang, ollama_model, custom_prompt, num_ctx, job_path, output_format, gpu_lock)
     
     return jsonify({'job_id': job_id, 'success': True, 'files': []})
 
@@ -629,6 +636,6 @@ def get_job_info(job_id):
     return jsonify({'job_id': job_id, 'files': files, 'visualizations': vis, 'translated_files': trans, 'created': jp.stat().st_ctime})
 
 if __name__ == '__main__':
-    print("🚀 SERVER STARTING (V3.1 - BATCH SUPPORT)")
+    print("🚀 SERVER STARTING (V3.2 - CTX OPTION)")
     if AVAILABLE_OLLAMA_MODELS: print(f"📦 Models: {AVAILABLE_OLLAMA_MODELS}")
     app.run(debug=False, host='0.0.0.0', port=5000)

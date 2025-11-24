@@ -233,6 +233,20 @@
                                                     {% endif %}
                                                 </small>
                                             </div>
+
+                                            <div class="mb-3">
+                                                <label for="num_ctx" class="form-label">
+                                                    {{ translations.ctx_label }}
+                                                    <i class="fas fa-question-circle" data-bs-toggle="tooltip" title="{{ translations.ctx_help }}"></i>
+                                                </label>
+                                                <select class="form-select font-monospace" id="num_ctx" name="num_ctx">
+                                                    <option value="2048">2048 (Fastest)</option>
+                                                    <option value="4096" selected>4096 (Standard)</option>
+                                                    <option value="8192">8192 (Long Docs)</option>
+                                                    <option value="16384">16384 (Very Long)</option>
+                                                    <option value="32768">32768 (Heavy VRAM)</option>
+                                                </select>
+                                            </div>
                                             
                                             <div class="mb-3">
                                                 <label for="target_lang" class="form-label">{{ translations.target_lang }}</label>
