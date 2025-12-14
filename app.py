@@ -3,6 +3,7 @@ import uuid
 import subprocess
 import requests
 import time
+import pypdfium2 as pdfium
 import json
 import threading
 from collections import deque
@@ -225,7 +226,7 @@ TRANSLATIONS = {
     'fr': {
         'title': 'Yomitoku + Ollama', 'subtitle': 'Analyse & Traduction de documents',
         'select_file': 'Sélectionnez vos documents', 'format_label': 'Format de sortie',
-        'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'},
+        'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV', 'pdf': 'PDF (Traduction → HTML)'},
         'device': 'Périphérique', 'options': 'Options avancées', 'trans_options': 'Options de traduction',
         'vis': 'Générer la visualisation', 'lite': 'Mode léger (rapide)',
         'figure': 'Exporter les figures', 'figure_letter': 'Texte dans les figures',
@@ -252,12 +253,21 @@ TRANSLATIONS = {
         'tooltip_ignore_meta': 'Ignore les en-têtes, pieds de page et numéros de page',
         'tooltip_translate': 'Active la traduction automatique via Ollama après l\'OCR',
         'progress_processing': 'Traitement en cours...', 'progress_page': 'Page',
-        'progress_of': 'sur', 'progress_complete': 'Analyse terminée !'
+        'progress_of': 'sur', 'progress_complete': 'Analyse terminée !',
+        'view_btn': 'Voir', 'calculating': 'Calcul...', 'total_size': 'Total',
+        'no_jobs_found': 'Aucune analyse trouvée', 'click_view': 'Cliquez pour voir les résultats',
+        'file_count_label': 'fichier(s)', 'multi_files': 'Fichiers multiples autorisés (Max: 200MB)',
+        'modify_prompt': 'Modifiez le prompt ci-dessous selon vos besoins',
+        'models_detected': 'modèle(s) détecté(s)',
+        'variables': 'Variables',
+        'p_default': 'Défaut', 'p_manga': 'Manga', 'p_game': 'Jeux vidéo',
+        'p_famitsu': 'Famitsu', 'p_tech': 'Technique', 'p_admin': 'Administratif',
+        'please_wait': 'Veuillez patienter'
     },
     'en': {
         'title': 'Yomitoku + Ollama', 'subtitle': 'Document Analysis & Translation',
         'select_file': 'Select documents', 'format_label': 'Output Format',
-        'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'},
+        'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV', 'pdf': 'PDF (Translation → HTML)'},
         'device': 'Device', 'options': 'Advanced Options', 'trans_options': 'Translation Options',
         'vis': 'Generate visualization', 'lite': 'Lite mode (fast)',
         'figure': 'Export figures', 'figure_letter': 'Text in figures',
@@ -284,12 +294,21 @@ TRANSLATIONS = {
         'tooltip_ignore_meta': 'Ignores headers, footers and page numbers',
         'tooltip_translate': 'Enables automatic translation via Ollama after OCR',
         'progress_processing': 'Processing...', 'progress_page': 'Page',
-        'progress_of': 'of', 'progress_complete': 'Analysis completed!'
+        'progress_of': 'of', 'progress_complete': 'Analysis completed!',
+        'view_btn': 'View', 'calculating': 'Calculating...', 'total_size': 'Total',
+        'no_jobs_found': 'No analysis found', 'click_view': 'Click to view results',
+        'file_count_label': 'file(s)', 'multi_files': 'Multi-files allowed (Max: 200MB total)',
+        'modify_prompt': 'Modify the prompt below according to your needs',
+        'models_detected': 'model(s) detected',
+        'variables': 'Variables',
+        'p_default': 'Default', 'p_manga': 'Manga', 'p_game': 'Video Games',
+        'p_famitsu': 'Famitsu', 'p_tech': 'Technical', 'p_admin': 'Administrative',
+        'please_wait': 'Please wait'        
     },
     'ja': {
         'title': 'Yomitoku + Ollama', 'subtitle': '文書分析 & 翻訳',
         'select_file': '文書を選択', 'format_label': '出力形式',
-        'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'},
+        'formats': {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV', 'pdf': 'PDF (翻訳 → HTML)'},
         'device': 'デバイス', 'options': '高度なオプション', 'trans_options': '翻訳オプション',
         'vis': '可視化を生成', 'lite': 'ライトモード(高速)',
         'figure': '図をエクスポート', 'figure_letter': '図内の文字',
@@ -315,7 +334,16 @@ TRANSLATIONS = {
         'tooltip_combine': 'すべてのページを1つの結果ファイルに結合します',
         'tooltip_ignore_meta': 'ヘッダー、フッター、ページ番号を無視します',
         'tooltip_translate': 'OCR後にOllamaによる自動翻訳を有効にします',
-        'progress_processing': '処理中...', 'progress_page': 'ページ', 'progress_of': '／', 'progress_complete': '分析が完了しました!'
+        'progress_processing': '処理中...', 'progress_page': 'ページ', 'progress_of': '／', 'progress_complete': '分析が完了しました!',
+        'view_btn': '表示', 'calculating': '計算中...', 'total_size': '合計',
+        'no_jobs_found': '分析履歴がありません', 'click_view': '結果を表示するにはクリック',
+        'file_count_label': 'ファイル', 'multi_files': '複数ファイル対応 (最大合計: 200MB)',
+        'modify_prompt': '必要に応じて以下のプロンプトを修正してください',
+        'models_detected': '個のモデルを検出',
+        'variables': '変数',
+        'p_default': 'デフォルト', 'p_manga': 'マンガ', 'p_game': 'ビデオゲーム',
+        'p_famitsu': 'ファミ通', 'p_tech': '技術書', 'p_admin': '行政文書',
+        'please_wait': 'お待ちください'
     }
 }
 
@@ -336,7 +364,15 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
     if not wait_for_vram(required_gb=4.0, timeout=20, job_id=job_id):
          log_to_job(job_id, "⚠️ Low VRAM before translation, risk of failure...", 'warning')
 
-    FORMAT_NAMES = {'md': 'Markdown', 'html': 'HTML', 'json': 'JSON', 'csv': 'CSV'}
+    # Dictionnaire des formats pour le prompt
+    FORMAT_NAMES = {
+        'md': 'Markdown', 
+        'html': 'HTML', 
+        'json': 'JSON', 
+        'csv': 'CSV',
+        'pdf': 'text extracted from a PDF'
+    }
+    
     format_name = FORMAT_NAMES.get(output_format, output_format)
     
     LANG_NAMES = {
@@ -346,7 +382,7 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
     }
     target_lang_full = LANG_NAMES.get(target_lang, target_lang)
     
-    if len(text.strip()) < 50:
+    if len(text.strip()) < 10:
         return text
     
     try:
@@ -354,15 +390,17 @@ def translate_with_ollama(text, target_lang='fr', model=None, custom_prompt=None
         
         messages = []
         if custom_prompt and custom_prompt.strip():
+            # Injection des variables dans le prompt perso
             safe_prompt = custom_prompt.replace('{target_lang}', target_lang_full).replace('{format}', format_name)
             messages.append({"role": "system", "content": safe_prompt})
         else:
+            # Prompt système par défaut
             messages.append({
                 "role": "system",
                 "content": f"""You are a professional translator. 
-Translate the following {format_name} document from Japanese to {target_lang_full}.
-EXACTLY preserve formatting, tags, whitespace, and structure.
-Return ONLY the translated document."""
+Translate the following {format_name} from Japanese to {target_lang_full}.
+Maintain the original meaning and nuances.
+Return ONLY the translated text."""
             })
         
         messages.append({"role": "user", "content": text})
@@ -376,7 +414,7 @@ Return ONLY the translated document."""
                 "options": {
                     "temperature": 0.1, 
                     "top_p": 0.9, 
-                    "num_ctx": num_ctx, # Valeur configurable
+                    "num_ctx": num_ctx, 
                     "num_predict": -1 
                 }
             },
@@ -454,23 +492,87 @@ def run_yomitoku_job(job_id, input_filenames, base_cmd, translate_enabled, targe
             log_to_job(job_id, f"\n🌐 TRANSLATION to {target_lang} (Ctx: {num_ctx})", 'info')
             results_dir = job_path / 'results'
             files_to_translate = []
-            for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv']:
+            
+            # On inclut *.pdf dans la recherche
+            for ext in ['*.md', '*.html', '*.txt', '*.json', '*.csv', '*.pdf']:
                 files_to_translate.extend(results_dir.glob(ext))
             
-            # Traduction de TOUS les fichiers générés
             for i, file_path in enumerate(files_to_translate):
+                # On saute les fichiers déjà traduits
+                if file_path.name.startswith('translated_'): continue
+
                 log_to_job(job_id, f"📝 Translating ({i+1}/{len(files_to_translate)}): {file_path.name}", 'info')
+                
                 try:
-                    text = file_path.read_text(encoding='utf-8', errors='replace')
+                    text = ""
+                    is_pdf_source = (file_path.suffix.lower() == '.pdf')
+
+                    # 1. Extraction du texte
+                    if is_pdf_source:
+                        try:
+                            pdf = pdfium.PdfDocument(str(file_path))
+                            text_pages = []
+                            for page in pdf:
+                                text_page = page.get_textpage()
+                                text_pages.append(text_page.get_text_range())
+                                text_page.close()
+                            text = "\n\n".join(text_pages)
+                            pdf.close()
+                        except Exception as pdf_err:
+                            log_to_job(job_id, f"⚠️ PDF Read Error: {pdf_err}", 'warning')
+                            continue
+                    else:
+                        text = file_path.read_text(encoding='utf-8', errors='replace')
+
+                    if not text.strip(): continue
+
+                    # 2. Envoi à Ollama
                     translated = translate_with_ollama(text, target_lang, ollama_model, custom_prompt, num_ctx, job_id, output_format)
                     
                     if translated and not translated.startswith('❌'):
-                        translated_file = results_dir / f"translated_{target_lang}_{file_path.name}"
-                        translated_file.write_text(translated, encoding='utf-8')
-                        log_to_job(job_id, f"✅ Translated: {translated_file.name}", 'success')
+                        
+                        # 3. Sauvegarde
+                        if is_pdf_source:
+                            # CAS SPÉCIAL : Source PDF -> Sortie HTML
+                            new_name = f"translated_{target_lang}_{file_path.name}.html"
+                            translated_file = results_dir / new_name
+                            
+                            # Traduction du titre du document HTML
+                            titles_map = {
+                                'fr': 'Traduction', 'en': 'Translation', 'ja': '翻訳', 
+                                'es': 'Traducción', 'de': 'Übersetzung'
+                            }
+                            doc_title = titles_map.get(target_lang, 'Translation')
+                            
+                            # Template HTML simple pour un rendu propre
+                            html_content = f"""<!DOCTYPE html>
+<html lang="{target_lang}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{doc_title}: {file_path.name}</title>
+<style>
+    body {{ font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 900px; margin: auto; background: #f4f4f9; }}
+    .content {{ background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); white-space: pre-wrap; }}
+</style>
+</head>
+<body>
+    <div class="content">{translated}</div>
+</body>
+</html>"""
+                            translated_file.write_text(html_content, encoding='utf-8')
+                            log_to_job(job_id, f"✅ Translated (Saved as HTML): {translated_file.name}", 'success')
+                        
+                        else:
+                            # CAS STANDARD (Markdown, JSON, etc.)
+                            new_name = f"translated_{target_lang}_{file_path.name}"
+                            translated_file = results_dir / new_name
+                            translated_file.write_text(translated, encoding='utf-8')
+                            log_to_job(job_id, f"✅ Translated: {translated_file.name}", 'success')
+                            
                 except Exception as e:
                     log_to_job(job_id, f"❌ File error: {e}", 'error')
-        
+
         with data_lock:
             job_data[job_id]['status'] = 'complete'
             job_data[job_id]['progress'] = 100
@@ -541,10 +643,19 @@ def stream_logs(job_id):
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files: return jsonify({'error': 'No file provided'}), 400
+    # Gestion des messages d'erreur traduits
+    lang = session.get('lang', 'fr')
+    err_msgs = {
+        'fr': {'no_file': 'Aucun fichier fourni', 'empty': 'Aucun fichier sélectionné', 'invalid': 'Aucun fichier valide'},
+        'en': {'no_file': 'No file provided', 'empty': 'No file selected', 'invalid': 'No valid files'},
+        'ja': {'no_file': 'ファイルがありません', 'empty': 'ファイルが選択されていません', 'invalid': '有効なファイルがありません'}
+    }
+    msgs = err_msgs.get(lang, err_msgs['en'])
+
+    if 'file' not in request.files: return jsonify({'error': msgs['no_file']}), 400
     
     files = request.files.getlist('file')
-    if not files or files[0].filename == '': return jsonify({'error': 'No file selected'}), 400
+    if not files or files[0].filename == '': return jsonify({'error': msgs['empty']}), 400
     
     job_id = str(uuid.uuid4())[:8]
     job_path = get_job_path(job_id)
@@ -558,7 +669,7 @@ def upload_file():
             valid_filenames.append(filename)
     
     if not valid_filenames:
-        return jsonify({'error': 'No valid files'}), 400
+        return jsonify({'error': msgs['invalid']}), 400
     
     output_format = request.form.get('format', 'md')
     device = request.form.get('device', 'cpu')
@@ -595,7 +706,16 @@ def download_file(job_id, filename):
 @app.route('/view/<job_id>/<filename>')
 def view_file(job_id, filename):
     p = get_job_path(job_id) / 'results' / filename
-    mt = {'.txt': 'text/plain', '.md': 'text/markdown', '.html': 'text/html', '.json': 'application/json', '.csv': 'text/csv', '.png': 'image/png', '.jpg': 'image/jpeg'}
+    mt = {
+        '.txt': 'text/plain', 
+        '.md': 'text/markdown', 
+        '.html': 'text/html', 
+        '.json': 'application/json', 
+        '.csv': 'text/csv', 
+        '.png': 'image/png', 
+        '.jpg': 'image/jpeg',
+        '.pdf': 'application/pdf'
+    }
     return send_file(p, mimetype=mt.get(p.suffix.lower(), 'application/octet-stream'))
 
 @app.route('/results/<job_id>')

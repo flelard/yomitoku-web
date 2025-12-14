@@ -1,6 +1,6 @@
 # Yomitoku-Web 🚀
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)
 ![License](https://img.shields.io/badge/license-CC_BY--NC--SA_4.0-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-yellow)
 
@@ -29,7 +29,7 @@ This project is a **web-based wrapper** built upon the excellent work of **Kotar
 
 This application bridges the gap between powerful command-line tools and user accessibility. It combines two major technologies into a single workflow:
 
-1.  **OCR (Optical Character Recognition)**: Uses the **Yomitoku** engine to analyze Japanese documents (PDF, Images) and extract text.
+1.  **OCR (Optical Character Recognition)**: Uses the **Yomitoku** (v0.10.2+) engine to analyze Japanese documents (PDF, Images) and extract text.
 2.  **Translation**: Uses **Ollama** (Local LLMs) to automatically translate the extracted text into your target language.
 
 **Key Benefit: 100% Offline & Private**
@@ -39,13 +39,19 @@ Unlike cloud services, this tool runs entirely on your hardware. Your documents 
 
 #### User Interface & Experience
 *   **Drag & Drop Upload**: Simple interface to process files (PDF, JPG, PNG, TIFF, BMP).
+*   **Full Localization**: The interface, buttons, and processing logs are fully translated in English, French, and Japanese.
 *   **Real-time Monitoring**: View live server logs via SSE (Server-Sent Events) and a visual progress bar.
 *   **Job History**: Access previous analyses and download results later via the `/jobs` page.
-*   **Multi-format Output**: Export results to Markdown, HTML, JSON, or CSV.
+
+#### Multi-format Output
+*   **Standard Formats**: Export results to Markdown, HTML, JSON, or CSV.
+*   **PDF Support**:
+    *   **OCR Phase**: Generates a **Searchable PDF** (Original image + text layer).
+    *   **Translation Phase**: Automatically extracts text and generates a clean **HTML document** (formatted for readability).
 
 #### Translation Capabilities
 *   **Local AI Integration**: Connects seamlessly with a running Ollama instance.
-*   **Contextual Prompts**: Select specialized prompts to guide the translation style (Default, Manga, Video Games, Technical, Administrative).
+*   **Contextual & Custom Prompts**: Select specialized prompts (Default, Manga, Video Games, Technical, Administrative) or **write your own custom prompt**.
 
 #### Advanced OCR Options
 *   **Visualization**: Generate images with detected text boxes overlayed (`--vis`).
@@ -55,13 +61,14 @@ Unlike cloud services, this tool runs entirely on your hardware. Your documents 
 ### Technical Aspects
 
 #### Resource Management
-*   **Concurrency**: Handles up to **2 jobs simultaneously** in the background.
+*   **Job Queue System**: Requests are automatically queued. To ensure stability and prevent VRAM crashes, jobs are processed **sequentially** (one by one).
 *   **GPU Safety**: Implements a **GPU Lock** to ensure only one process accesses CUDA at a time.
-*   **VRAM Protection**: Automatically monitors GPU memory and unloads Ollama models during the OCR phase to prevent Out-Of-Memory crashes.
+*   **VRAM Protection**: Automatically monitors GPU memory and unloads Ollama models during the OCR phase.
 
 #### Prerequisites
 *   **Python 3.10+**
-*   **Yomitoku**: `pip install yomitoku`
+*   **Yomitoku**: `pip install yomitoku` (Requires version **0.10.2+**)
+*   **Torch**: Requires version **2.6.0+** (Compatible with **CUDA 12.4**)
 *   **Ollama**: Must be installed and running for translation features ([ollama.com](https://ollama.com)).
 *   **(Recommended)**: NVIDIA GPU with CUDA support for reasonable performance.
 
@@ -102,7 +109,7 @@ Ce projet est une **interface graphique (wrapper)** construite sur l'excellent t
 
 Cette application rend accessible des outils puissants en ligne de commande via une interface web simple. Elle combine deux technologies :
 
-1.  **OCR (Reconnaissance de Caractères)** : Utilise le moteur **Yomitoku** pour analyser des documents japonais (PDF, Images) et en extraire le texte.
+1.  **OCR (Reconnaissance de Caractères)** : Utilise le moteur **Yomitoku** (v0.10.2+) pour analyser des documents japonais (PDF, Images) et en extraire le texte.
 2.  **Traduction** : Utilise **Ollama** (IA Locale) pour traduire automatiquement le texte extrait vers la langue de votre choix.
 
 **Avantage clé : 100% Hors-ligne & Privé**
@@ -112,13 +119,19 @@ Contrairement aux services cloud, cet outil tourne entièrement sur votre machin
 
 #### Interface & Expérience Utilisateur
 *   **Upload Glisser-Déposer** : Interface simple pour traiter vos fichiers (PDF, JPG, PNG, TIFF, BMP).
+*   **Traduction Intégrale** : L'interface, les menus et les logs sont disponibles en Français, Anglais et Japonais.
 *   **Suivi Temps Réel** : Visualisez les logs du serveur en direct et la barre de progression.
 *   **Historique** : Accédez aux analyses précédentes et téléchargez les résultats via la page `/jobs`.
-*   **Formats de Sortie** : Export vers Markdown, HTML, JSON ou CSV.
+
+#### Formats de Sortie
+*   **Formats Standards** : Export vers Markdown, HTML, JSON ou CSV.
+*   **Support PDF** :
+    *   **Phase OCR** : Génère un **PDF Recherchable** (Image originale + couche texte).
+    *   **Phase Traduction** : Extrait le texte et génère un **document HTML** propre et formaté.
 
 #### Capacités de Traduction
 *   **Intégration IA Locale** : Se connecte automatiquement à une instance Ollama locale.
-*   **Prompts Contextuels** : Choisissez des styles de traduction spécialisés (Défaut, Manga, Jeux Vidéo, Technique, Administratif).
+*   **Prompts Contextuels & Personnalisés** : Choisissez des styles de traduction spécialisés (Défaut, Manga, Jeux Vidéo, Technique, Administratif) ou **rédigez votre propre prompt**.
 
 #### Options OCR Avancées
 *   **Visualisation** : Génère des images avec les zones de texte détectées encadrées (`--vis`).
@@ -128,13 +141,14 @@ Contrairement aux services cloud, cet outil tourne entièrement sur votre machin
 ### Aspects Techniques
 
 #### Gestion des Ressources
-*   **Concurrence** : Gère jusqu'à **2 tâches simultanément** en arrière-plan.
+*   **Système de File d'Attente** : Les requêtes sont mises en attente automatiquement. Pour protéger la VRAM et la stabilité, les tâches sont traitées **séquentiellement** (une par une).
 *   **Sécurité GPU** : Implémente un **Verrou GPU** pour garantir qu'un seul processus utilise CUDA à la fois.
 *   **Protection VRAM** : Surveille la mémoire vidéo et décharge automatiquement les modèles Ollama pendant la phase OCR pour éviter les crashs mémoire.
 
 #### Prérequis
 *   **Python 3.10+**
-*   **Yomitoku** : `pip install yomitoku`
+*   **Yomitoku** : `pip install yomitoku` (Version **0.10.2+** requise)
+*   **Torch** : Version **2.6.0+** (Compatible **CUDA 12.4**)
 *   **Ollama** : Doit être installé et lancé pour la traduction ([ollama.com](https://ollama.com)).
 *   **(Recommandé)** : GPU NVIDIA avec support CUDA.
 
@@ -175,7 +189,7 @@ En tant que travail dérivé de Yomitoku, ce projet est distribué sous la licen
 
 本ツールは、コマンドラインツールの操作を簡略化し、以下の2つの技術を統合します：
 
-1.  **OCR (光学文字認識)**: **Yomitoku**エンジンを使用して、日本の文書（PDF、画像）からテキストを抽出します。
+1.  **OCR (光学文字認識)**: **Yomitoku** (v0.10.2+) エンジンを使用して、日本の文書（PDF、画像）からテキストを抽出します。
 2.  **翻訳**: **Ollama**（ローカルLLM）を使用して、抽出されたテキストを自動的に翻訳します。
 
 **利点: 完全なオフラインとプライバシー**
@@ -185,13 +199,19 @@ En tant que travail dérivé de Yomitoku, ce projet est distribué sous la licen
 
 #### ユーザーインターフェース
 *   **ドラッグ＆ドロップ**: ファイル（PDF, JPG, PNG等）を簡単にアップロード。
+*   **完全なローカリゼーション**: インターフェース、ログ、エラーメッセージは日本語、英語、フランス語に対応しています。
 *   **リアルタイム監視**: サーバーログと進捗バーをライブで表示。
 *   **履歴管理**: 過去の分析結果を保存し、`/jobs`ページからいつでもダウンロード可能。
-*   **出力形式**: Markdown, HTML, JSON, CSVに対応。
+
+#### 出力形式
+*   **標準フォーマット**: Markdown, HTML, JSON, CSVに対応。
+*   **PDFサポート**:
+    *   **OCRフェーズ**: **検索可能なPDF**（元画像＋テキストレイヤー）を生成します。
+    *   **翻訳フェーズ**: テキストを抽出し、読みやすく整形された**HTMLドキュメント**を生成します。
 
 #### 翻訳機能
 *   **ローカルAI連携**: 実行中のOllamaインスタンスとシームレスに連携。
-*   **専門プロンプト**: 文書の種類に応じた翻訳スタイルを選択可能（デフォルト、マンガ、ゲーム、技術書、行政文書）。
+*   **コンテキスト＆カスタムプロンプト**: 文書の種類に応じた翻訳スタイル（マンガ、ゲーム、技術書、行政文書）を選択するか、**独自のプロンプトを作成**できます。
 
 #### 高度なOCRオプション
 *   **可視化**: テキスト領域を枠で囲んだ画像を生成 (`--vis`)。
@@ -201,13 +221,14 @@ En tant que travail dérivé de Yomitoku, ce projet est distribué sous la licen
 ### 技術仕様
 
 #### リソース管理
-*   **並列処理**: バックグラウンドで最大**2つのジョブ**を同時処理。
+*   **ジョブキューシステム**: 分析リクエストは自動的にキューに入れられます。VRAMとシステムの安定性を守るため、ジョブは**順次（一つずつ）**処理されます。
 *   **GPUロック**: GPUの競合を防ぐため、一度に1つのプロセスのみがCUDAを使用するよう制御。
 *   **VRAM保護**: OCR実行中はOllamaモデルを自動的にアンロードし、メモリ不足によるクラッシュを防止。
 
 #### 前提条件
 *   **Python 3.10+**
-*   **Yomitoku**: `pip install yomitoku`
+*   **Yomitoku**: `pip install yomitoku` (**0.10.2+** 必須)
+*   **Torch**: **2.6.0+** (**CUDA 12.4** 対応)
 *   **Ollama**: 翻訳機能にはOllamaのインストールと起動が必要です ([ollama.com](https://ollama.com))。
 *   **(推奨)**: CUDA対応のNVIDIA GPU。
 

@@ -84,7 +84,8 @@
                         <h4><i class="fas fa-cloud-upload-alt"></i> {{ translations.subtitle }}</h4>
                     </div>
                     <div class="card-body">
-                        <form id="uploadForm" enctype="multipart/form-data">
+                        <!-- AJOUT IMPORTANT : onsubmit="event.preventDefault()" empêche le rechargement de page -->
+                        <form id="uploadForm" enctype="multipart/form-data" method="POST" onsubmit="event.preventDefault()">
                             <div class="mb-3">
                                 <label for="fileInput" class="form-label"><strong>{{ translations.select_file }}</strong> (PDF, PNG, JPG, TIFF)</label>
                                 <div class="upload-area" id="uploadArea">
@@ -92,7 +93,7 @@
                                     <div class="text-center">
                                         <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
                                         <p class="mb-2">{{ translations.drag_drop }}</p>
-                                        <small class="text-muted">Multi-files allowed (Max: 200MB total)</small>
+                                        <small class="text-muted">{{ translations.multi_files }}</small>
                                     </div>
                                 </div>
                                 <div id="filePreview"></div>
@@ -227,9 +228,9 @@
                                                 <small class="text-muted">
                                                     <i class="fas fa-info-circle"></i> 
                                                     {% if ollama_models %}
-                                                        {{ ollama_models|length }} modèle(s) détecté(s)
+                                                        {{ ollama_models|length }} {{ translations.models_detected }}
                                                     {% else %}
-                                                        Aucun modèle détecté - Démarrez Ollama
+                                                        {{ translations.no_models }}
                                                     {% endif %}
                                                 </small>
                                             </div>
@@ -264,22 +265,22 @@
                                                 </label>
                                                 <div class="btn-group mb-2 w-100" role="group">
                                                     <button type="button" class="btn btn-sm btn-outline-primary" id="resetPrompt">
-                                                        <i class="fas fa-undo"></i> Défaut
+                                                        <i class="fas fa-undo"></i> {{ translations.p_default }}
                                                     </button>
                                                     <button type="button" class="btn btn-sm btn-outline-success" id="promptManga">
-                                                        <i class="fas fa-book"></i> Manga
+                                                        <i class="fas fa-book"></i> {{ translations.p_manga }}
                                                     </button>
                                                     <button type="button" class="btn btn-sm btn-outline-info" id="promptGame">
-                                                        <i class="fas fa-gamepad"></i> Jeux vidéo
+                                                        <i class="fas fa-gamepad"></i> {{ translations.p_game }}
                                                     </button>
                                                     <button type="button" class="btn btn-sm btn-outline-warning" id="promptFamitsu">
-                                                        <i class="fas fa-star"></i> Famitsu
+                                                        <i class="fas fa-star"></i> {{ translations.p_famitsu }}
                                                     </button>
                                                     <button type="button" class="btn btn-sm btn-outline-warning" id="promptTech">
-                                                        <i class="fas fa-laptop-code"></i> Technique
+                                                        <i class="fas fa-laptop-code"></i> {{ translations.p_tech }}
                                                     </button>
                                                     <button type="button" class="btn btn-sm btn-outline-danger" id="promptAdmin">
-                                                        <i class="fas fa-file-contract"></i> Administratif
+                                                        <i class="fas fa-file-contract"></i> {{ translations.p_admin }}
                                                     </button>
                                                 </div>
                                                 <textarea class="form-control font-monospace" id="custom_prompt" name="custom_prompt" rows="6">You are a professional translator. Translate this Japanese {format} to {target_lang}.
@@ -287,8 +288,8 @@ Return ONLY the translation, nothing else:
 
 {text}</textarea>
                                                 <small class="text-muted">
-                                                    <i class="fas fa-lightbulb"></i> Variables : <code>{text}</code>, <code>{target_lang}</code>, <code>{format}</code>
-                                                    <br><i class="fas fa-info-circle"></i> Modifiez le prompt ci-dessous selon vos besoins
+                                                    <i class="fas fa-lightbulb"></i> {{ translations.variables }} : <code>{text}</code>, <code>{target_lang}</code>, <code>{format}</code>
+                                                    <br><i class="fas fa-info-circle"></i> {{ translations.modify_prompt }}
                                                 </small>
                                             </div>
                                         </div>
@@ -314,7 +315,7 @@ Return ONLY the translation, nothing else:
 
                             <!-- ZONE DES LOGS EN TEMPS RÉEL -->
                             <div id="logsContainer">
-                                <h6><i class="fas fa-terminal"></i> Logs en temps réel :</h6>
+                                <h6><i class="fas fa-terminal"></i> Real-time logs :</h6>
                                 <div id="logsContent"></div>
                             </div>
 
@@ -329,7 +330,7 @@ Return ONLY the translation, nothing else:
                             <div id="processingStatus">
                                 <i class="fas fa-cog fa-spin fa-2x text-warning mb-3"></i>
                                 <h5><strong>{{ translations.progress_processing }}</strong></h5>
-                                <p class="text-muted">Veuillez patienter</p>
+                                <p class="text-muted">{{ translations.please_wait }}</p>
                             </div>
                         </form>
                     </div>
@@ -348,8 +349,15 @@ Return ONLY the translation, nothing else:
         </div>
     </div>
 
+    <!-- SCRIPT DE DONNÉES SÉCURISÉ (Empêche les erreurs de syntaxe VS Code) -->
+    <script id="translations-data" type="application/json">{{ translations | tojson | safe }}</script>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // RÉCUPÉRATION SÉCURISÉE DES DONNÉES JSON
+        // On ne met plus de Jinja directement dans le JS, on lit la balise script ci-dessus
+        const translations = JSON.parse(document.getElementById('translations-data').textContent);
+
         // ===== PROMPTS PRÉDÉFINIS =====
         const PROMPTS = {
             default: `You are a professional translator. Translate this Japanese {format} to {target_lang}.
@@ -507,12 +515,12 @@ Document to translate :
                 
                 let totalSize = 0;
                 
-                // On prépare le conteneur principal
+                // On prépare le conteneur principal (AVEC TRADUCTION JS)
                 const containerHtml = `
                     <div class="mt-2">
                         <div class="d-flex justify-content-between align-items-center">
-                            <strong><i class="fas fa-layer-group"></i> ${files.length} fichier(s)</strong>
-                            <span class="badge bg-secondary" id="totalSizeBadge">Calculating...</span>
+                            <strong><i class="fas fa-layer-group"></i> ${files.length} ${translations.file_count_label}</strong>
+                            <span class="badge bg-secondary" id="totalSizeBadge">${translations.calculating}</span>
                         </div>
                         <hr class="my-2">
                         <div class="file-list list-group mb-2" id="fileListContainer"></div>
@@ -527,27 +535,23 @@ Document to translate :
                 Array.from(files).forEach(file => {
                     totalSize += file.size;
                     
-                    // Création de l'élément de liste (DOM) pour gérer l'async proprement
                     const item = document.createElement('div');
                     item.className = 'list-group-item d-flex align-items-center p-2';
                     
-                    // Zone vignette (gauche)
                     const thumbCol = document.createElement('div');
                     thumbCol.className = 'me-3 text-center d-flex align-items-center justify-content-center';
                     thumbCol.style.width = '60px';
                     thumbCol.style.height = '60px';
                     thumbCol.style.backgroundColor = '#f8f9fa';
                     thumbCol.style.borderRadius = '5px';
-                    thumbCol.style.overflow = 'hidden'; // Important pour que l'image ne dépasse pas
+                    thumbCol.style.overflow = 'hidden'; 
                     
-                    // Icône par défaut (en attendant le chargement ou si pas image)
                     thumbCol.innerHTML = '<i class="fas fa-file-pdf fa-2x text-danger"></i>'; 
                     
                     if (file.type.startsWith('image/')) {
-                         thumbCol.innerHTML = '<i class="fas fa-spinner fa-spin text-muted"></i>'; // Spinner pendant chargement
+                         thumbCol.innerHTML = '<i class="fas fa-spinner fa-spin text-muted"></i>'; 
                     }
 
-                    // Zone infos (droite)
                     const infoCol = document.createElement('div');
                     infoCol.className = 'flex-grow-1 overflow-hidden';
                     infoCol.innerHTML = `
@@ -559,7 +563,6 @@ Document to translate :
                     item.appendChild(infoCol);
                     listContainer.appendChild(item);
                     
-                    // Chargement asynchrone de l'image (si c'est une image)
                     if (file.type.startsWith('image/')) {
                         const reader = new FileReader();
                         reader.onload = function(e) {
@@ -569,8 +572,8 @@ Document to translate :
                     }
                 });
                 
-                // Mise à jour de la taille totale une fois la boucle finie
-                document.getElementById('totalSizeBadge').textContent = (totalSize / 1024 / 1024).toFixed(2) + ' MB Total';
+                // Mise à jour de la taille totale (AVEC TRADUCTION JS)
+                document.getElementById('totalSizeBadge').textContent = (totalSize / 1024 / 1024).toFixed(2) + ' MB ' + translations.total_size;
             }
 
             function showToast(message, type = 'success') {
@@ -605,9 +608,8 @@ Document to translate :
                         eventSource.close();
                         analyzeBtnContainer.classList.remove('btn-hidden');
                         processingStatus.style.display = 'none';
-                        // RÉACTIVER LE BOUTON EN CAS D'ERREUR
                         analyzeBtn.disabled = false;
-                        analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
+                        analyzeBtn.innerHTML = `<i class="fas fa-magic"></i> ${translations.launch}`;
                         return;
                     }
                     
@@ -615,9 +617,9 @@ Document to translate :
                         const progress = Math.round(data.progress);
                         progressBar.style.width = progress + '%';
                         progressPercent.textContent = progress + '%';
-                        progressText.innerHTML = `<strong><i class="fas fa-spinner fa-spin"></i> {{ translations.progress_processing }}</strong>`;
+                        progressText.innerHTML = `<strong><i class="fas fa-spinner fa-spin"></i> ${translations.progress_processing}</strong>`;
                         if (data.current_page && data.total_pages) {
-                            progressDetails.textContent = `Page ${data.current_page} / ${data.total_pages}`;
+                            progressDetails.textContent = `${translations.progress_page} ${data.current_page} ${translations.progress_of} ${data.total_pages}`;
                         }
                     }
                     
@@ -644,7 +646,7 @@ Document to translate :
                     
                     if (data.type === 'status' && data.status === 'complete') {
                         progressBar.classList.remove('progress-bar-animated');
-                        progressText.innerHTML = `<strong><i class="fas fa-check-circle"></i> {{ translations.progress_complete }}</strong>`;
+                        progressText.innerHTML = `<strong><i class="fas fa-check-circle"></i> ${translations.progress_complete}</strong>`;
                         progressBar.className = 'progress-bar bg-success';
                         
                         if (jobResults[currentJobId]) {
@@ -654,9 +656,8 @@ Document to translate :
                         processingStatus.style.display = 'none';
                         analyzeBtnContainer.classList.remove('btn-hidden');
                         eventSource.close();
-                        // RÉACTIVER LE BOUTON UNE FOIS TOUT FAIT
                         analyzeBtn.disabled = false;
-                        analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
+                        analyzeBtn.innerHTML = `<i class="fas fa-magic"></i> ${translations.launch}`;
                     }
                 };
                 
@@ -665,24 +666,23 @@ Document to translate :
                     eventSource.close();
                     analyzeBtnContainer.classList.remove('btn-hidden');
                     processingStatus.style.display = 'none';
-                    // RÉACTIVER LE BOUTON EN CAS DE DÉCONNEXION
                     analyzeBtn.disabled = false;
-                    analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> {{ translations.launch }}';
+                    analyzeBtn.innerHTML = `<i class="fas fa-magic"></i> ${translations.launch}`;
                 };
             }
 
             uploadForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
+                e.preventDefault(); // IMPORTANT : Empêche le rechargement de la page
                 
                 const formData = new FormData(uploadForm);
                 
                 if (!fileInput.files.length) {
-                    alert('Veuillez sélectionner au moins un fichier');
+                    alert(translations.no_files);
                     return;
                 }
 
                 analyzeBtn.disabled = true;
-                analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> {{ translations.launch }}...';
+                analyzeBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${translations.launch}...`;
                 resultsSection.style.display = 'none';
                 filePreview.style.display = 'none';
 
@@ -698,25 +698,27 @@ Document to translate :
                         jobResults[result.job_id] = result;
                         connectToLogs(result.job_id);
                     } else {
-                        alert(`{{ translations.error }}: ${result.error}`);
+                        alert(`${translations.error}: ${result.error}`);
                         progressContainer.style.display = 'none';
                         logsContainer.style.display = 'none';
                         analyzeBtnContainer.classList.remove('btn-hidden');
                         processingStatus.style.display = 'none';
+                        analyzeBtn.disabled = false;
+                        analyzeBtn.innerHTML = `<i class="fas fa-magic"></i> ${translations.launch}`;
                     }
                 } catch (error) {
                     console.error('Erreur:', error);
-                    alert('{{ translations.error }}');
+                    alert(translations.error);
                     progressContainer.style.display = 'none';
                     logsContainer.style.display = 'none';
                     analyzeBtnContainer.classList.remove('btn-hidden');
                     processingStatus.style.display = 'none';
-                } finally {
-
+                    analyzeBtn.disabled = false;
+                    analyzeBtn.innerHTML = `<i class="fas fa-magic"></i> ${translations.launch}`;
                 }
             });
 
-            // ✅ Afficher les résultats avec noms de fichiers cliquables
+            // ✅ Afficher les résultats avec noms de fichiers cliquables (AVEC TRADUCTION JS)
             function showResults() {
                 if (!currentJobId || !jobResults[currentJobId]) return;
                 
@@ -725,16 +727,16 @@ Document to translate :
                 
                 let html = `
                     <div class="alert alert-success">
-                        <i class="fas fa-check-circle"></i> {{ translations.success }}
+                        <i class="fas fa-check-circle"></i> ${translations.success}
                         <a href="/results/${result.job_id}" class="btn btn-sm btn-success float-end">
-                            <i class="fas fa-external-link-alt"></i> {{ translations.view_results }}
+                            <i class="fas fa-external-link-alt"></i> ${translations.view_results}
                         </a>
                     </div>
-                    <p><strong>{{ translations.job_id }}:</strong> ${result.job_id}</p>
+                    <p><strong>${translations.job_id}:</strong> ${result.job_id}</p>
                 `;
 
                 if (result.files && result.files.length > 0) {
-                    html += '<h6>{{ translations.files_generated }}:</h6><ul class="list-unstyled">';
+                    html += `<h6>${translations.files_generated}:</h6><ul class="list-unstyled">`;
                     result.files.forEach(file => {
                         html += `
                             <li class="mb-2">
@@ -742,9 +744,9 @@ Document to translate :
                                 <a href="${file.url.replace('/download/', '/view/')}" target="_blank">
                                     <strong>${file.name}</strong>
                                 </a>
-                                <a href="${file.url}" class="btn btn-sm btn-link">{{ translations.download }}</a>
+                                <a href="${file.url}" class="btn btn-sm btn-link">${translations.download}</a>
                                 <a href="${file.url.replace('/download/', '/view/')}" class="btn btn-sm btn-outline-primary" target="_blank">
-                                    <i class="fas fa-eye"></i> Voir
+                                    <i class="fas fa-eye"></i> ${translations.view_btn}
                                 </a>
                             </li>
                         `;
